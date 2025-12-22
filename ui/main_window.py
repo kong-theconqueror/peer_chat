@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         #load config
         app_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(app_dir, "..", "config", f'{text}.json')
+        print(config_path)
         self.app_config = Config(config_path)
         self.app_config.load_config()
 

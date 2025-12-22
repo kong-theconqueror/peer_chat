@@ -1,5 +1,5 @@
 from network.server import ServerThread
-from network.client import Client
+from network.sender import Sender
 
 class Peer:
     def __init__(self):
@@ -10,7 +10,7 @@ class Peer:
         self.server.start()
 
     def connect(self, host, port):
-        self.client = Client(host, port)
+        self.client = Sender(host, port)
 
     def send(self, data):
         if self.client:

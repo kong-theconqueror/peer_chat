@@ -6,8 +6,8 @@ class Config:
     # app_dir = os.path.dirname(os.path.abspath(__file__))
     # config_path = os.path.join(app_dir, "config.json")
     
-    def __init__(self, config_filename="config.json"):
-        self.config_path = config_filename
+    def __init__(self, config_path="config.json"):
+        self.config_path = config_path
         self.host_ip = "0.0.0.0"    
         self.listen_port = 8080
         self.username = "anonymous"
@@ -40,7 +40,3 @@ class Config:
             json.dump(config_data, f, indent=4) # "indent=4" makes the file human-readable
 
         print(f"Dictionary successfully saved to {self.config_path}")
-
-
-app_config = Config()
-app_config.load_config()

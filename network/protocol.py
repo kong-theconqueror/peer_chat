@@ -1,17 +1,13 @@
 import json
 import time
 
-def make_message(sender, content):
+def encode_message(sender, content):
     return json.dumps({
         "type": "MESSAGE",
         "sender": sender,
         "content": content,
         "timestamp": time.time()
-    }).encode()
+    }).encode("utf-8")
 
-# {
-#   "type": "MESSAGE",
-#   "from": "peer_id",
-#   "payload": "...",
-#   "timestamp": 123456
-# }
+def decode_message(data):
+    return json.loads(data.decode("utf-8"))
