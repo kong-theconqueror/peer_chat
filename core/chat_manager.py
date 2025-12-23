@@ -1,25 +1,64 @@
-import json
-from PyQt5.QtCore import QObject, pyqtSignal
-from network.peer import Peer
-from network.protocol import make_message
-from crypto.encrypt import encrypt, decrypt
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from network.server_worker import ServerWorker
+from network.client_worker import ClientWorker
+from core.db import ChatDatabase
 
 class ChatManager(QObject):
     message_received = pyqtSignal(str)
+    status = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        self.peer = Peer()
-        self.peer.start_server()
-        # self.peer.server.received.connect(self.handle_receive)
+        self.config = None
+        # SERVER THREAD
+        self.server_thread = QThread()
+        self.server_worker = ServerWorker()
+
+        self.server_worker.moveToThread(self.server_thread)
+        self.server_thread.started.connect(self.server_worker.run)
+
+        self.server_worker.new_data.connect(self.handle_data)
+        self.server_worker.status.connect(self.status.emit)
+
+        self.server_worker.finished.connect(self.server_thread.quit)
+        self.server_worker.finished.connect(self.server_worker.deleteLater)
+        self.server_thread.finished.connect(self.server_thread.deleteLater)
+
+        # CLIENT
+        self.client_worker = None
+
+    def set_config(self, config):
+        self.config = config
+        self.server_worker.set_config(config) 
+
+    def start(self):
+        self.server_thread.start()
+
+    def connect_to_peer(self, host, port):
+        self.client_worker = ClientWorker(host, port)
+        self.client_worker.connect_to_peer()
 
     def send_message(self, text):
-        encrypted = encrypt(text)
-        data = make_message("me", encrypted)
-        self.peer.send(data)
-        self.message_received.emit(f"Me: {text}")
+        if self.client_worker:
+            self.client_worker.send(text.encode())
 
-    def handle_receive(self, data):
-        msg = json.loads(data.decode())
-        decrypted = decrypt(msg["content"])
-        self.message_received.emit(f"Peer: {decrypted}")
+    def handle_data(self, data):
+        self.message_received.emit(data.decode())
+
+    def stop(self):
+        self.server_worker.stop()
+        self.server_thread.quit()
+        self.server_thread.wait()
+
+    def find_nodes(self):
+        ttl = self.config.ttl
+        chat_db = ChatDatabase(f'{self.config.node}.db')
+        neighbors = chat_db.get_neighbors()
+        print(neighbors)
+
+        for neighbor in neighbors:
+            try:
+                self.connect_to_peer(neighbor["ip"], neighbor["port"])
+                self.send_message("Hello")
+            except:
+                print(f"[ERROR] connect to {neighbor["username"]} timeout!")

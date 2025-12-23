@@ -41,12 +41,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
     def on_node_changed(self, text):
-        print("Selected node:", text)
-        #load config
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(app_dir, "..", "config", f'{text}.json')
-        print(config_path)
-        self.app_config = Config(config_path)
+        print(f"[LOG] Selected node: {text}")
+        #load config from file
+        self.app_config = Config(f'{text}.json')
         self.app_config.load_config()
 
         self.input_user.setText(self.app_config.username)
@@ -60,7 +57,11 @@ class MainWindow(QMainWindow):
         else:
             self.app_config.username = username
             self.app_config.save_config()
+            
+            self.chat_manager.set_config(self.app_config)
+            self.chat_manager.start()
         
         self.chat_window = ChatWindow(self.chat_manager)
+        self.chat_window.setWindowTitle(f'Peer Chat - Node {self.app_config.node}')
         self.chat_window.show()
 

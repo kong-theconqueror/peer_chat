@@ -25,7 +25,7 @@ class ChatWindow(QMainWindow):
         # layout.addWidget(self.chat_ui)
         # self.setLayout(layout)
 
-        # self.chat_manager.message_received.connect(self.display_message)
+        self.chat_manager.message_received.connect(self.display_message)
 
     def create_menu(self):
         self.menubar = self.menuBar()
@@ -43,7 +43,10 @@ class ChatWindow(QMainWindow):
         menu_config.addSeparator()
         menu_config.addAction(act_exit)
 
-        menu_discover.addAction("Find Nodes")
+        act_find_nodes = QAction("Find Nodes", self)
+        act_find_nodes.triggered.connect(self.chat_manager.find_nodes)
+        menu_discover.addAction(act_find_nodes)
+
         menu_about.addAction("About App")
 
     def create_ui(self):
@@ -109,9 +112,13 @@ class ChatWindow(QMainWindow):
         return widget
 
     def send_message(self):
-        msg = self.input_box.text()
-        self.input_box.clear()
+        msg = self.chat_input.text()
+        self.chat_input.clear()
         self.chat_manager.send_message(msg)
 
     def display_message(self, msg):
-        self.text_area.append(msg)
+        self.log_view.append(msg)
+
+    def close(self):
+        self.chat_manager.stop()
+        super().__init__()

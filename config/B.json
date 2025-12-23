@@ -1,6 +1,7 @@
 {
-    "host_ip": "0.0.0.0",
-    "listen_port": 0,
+    "ip": "127.0.0.1",
+    "port": 8081,
     "username": "user_B",
-    "user_id": "f4e92375-0b24-4f98-a705-cb8c336db15f"
+    "user_id": "4f8551d0-5ca6-415d-8d8a-6d24ff9b3205",
+    "node": "B"
 }

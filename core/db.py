@@ -1,8 +1,11 @@
+import os
 import sqlite3
 
 class ChatDatabase:
-    def __init__(self, db_path="chat.db"):
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+    def __init__(self, db_filename="chat.db"):
+        self.db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "db")
+        self.db_path = os.path.join(self.db_dir, db_filename)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.create_tables()
 
     def create_tables(self):
@@ -55,3 +58,16 @@ class ChatDatabase:
         cursor = self.conn.execute(sql, (user1, user2, user2, user1))
         return cursor.fetchall()
     
+    def get_neighbors(self):
+        self.conn.row_factory = sqlite3.Row
+        cursor = self.conn.cursor()
+
+        cursor.execute("""
+            SELECT user_id, username, ip, port, last_seen, status
+            FROM neighbor
+            ORDER BY status DESC, last_seen DESC
+        """)
+
+        neighbors = [dict(row) for row in cursor.fetchall()]
+        self.conn.close()
+        return neighbors

@@ -1,7 +1,6 @@
 import os
 import json
 from uuid import uuid4
-from datetime import datetime
 from core.db import ChatDatabase
 # from core.neighbor import 
 
@@ -54,7 +53,7 @@ for node in nodes:
     app_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(app_dir, "db", f"{node["node"]}.db")
 
-    chat_db = ChatDatabase(config_path)
+    chat_db = ChatDatabase(f"{node["node"]}.db")
     chat_db.reset_db()
     print(f"Create DB successfully saved to {config_path}")
 
