@@ -1,13 +1,21 @@
 import json
 import time
+from uuid import uuid4
 
-def encode_message(sender, content):
-    return json.dumps({
-        "type": "MESSAGE",
-        "sender": sender,
+def encode_message(sender, receiver, content, sender_name="", receiver_name="", ttl=5, message_type="MESSAGE", message_id=str(uuid4())):
+    en_msg_str = json.dumps({
+        "type": message_type,
+        "from": sender,
+        "from_n": sender_name,
+        "to": receiver,
+        "to_n": receiver_name,
+        "message_id": message_id,
         "content": content,
-        "timestamp": time.time()
-    }).encode("utf-8")
+        "ttl": ttl,
+        "timestamp": int(time.time())
+    })
+    print(en_msg_str)
+    return en_msg_str
 
 def decode_message(data):
     return json.loads(data.decode("utf-8"))

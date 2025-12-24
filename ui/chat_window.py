@@ -25,7 +25,12 @@ class ChatWindow(QMainWindow):
         # layout.addWidget(self.chat_ui)
         # self.setLayout(layout)
 
-        self.chat_manager.message_received.connect(self.display_message)
+        # chat
+        self.selected_user = {}
+
+        # events
+        self.chat_manager.message_received.connect(self.message_handle)
+        self.chat_manager.log_received.connect(self.log_handle)
 
     def create_menu(self):
         self.menubar = self.menuBar()
@@ -73,7 +78,7 @@ class ChatWindow(QMainWindow):
         layout = QVBoxLayout()
 
         self.node_list = QListWidget()
-        self.node_list.addItems(["Node A", "Node B", "Node C"])
+        # self.node_list.addItems(["Node A", "Node B", "Node C"])
 
         layout.addWidget(self.node_list)
         widget.setLayout(layout)
@@ -116,8 +121,11 @@ class ChatWindow(QMainWindow):
         self.chat_input.clear()
         self.chat_manager.send_message(msg)
 
-    def display_message(self, msg):
-        self.log_view.append(msg)
+    def message_handle(self, msg):
+        self.chat_view.append(msg["content"])
+
+    def log_handle(self, log):
+        self.log_view.append(f'{log["from_n"]}: {log["content"]}')
 
     def close(self):
         self.chat_manager.stop()

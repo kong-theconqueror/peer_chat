@@ -12,9 +12,11 @@ for i in range(0, 13):
         "port": 8080 + i,
         "username": f"user_{node_name}",
         "user_id": str(uuid4()),
-        "node": node_name
+        "node": node_name,
+        "ttl": 5
     }
     nodes.append(node)
+    
 node_map = [[0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
 [1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],

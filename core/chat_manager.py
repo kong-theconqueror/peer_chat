@@ -2,9 +2,11 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from network.server_worker import ServerWorker
 from network.client_worker import ClientWorker
 from core.db import ChatDatabase
+from network.protocol import encode_message, decode_message
 
 class ChatManager(QObject):
-    message_received = pyqtSignal(str)
+    message_received = pyqtSignal(dict)
+    log_received = pyqtSignal(dict)
     status = pyqtSignal(str)
 
     def __init__(self):
@@ -25,6 +27,7 @@ class ChatManager(QObject):
         self.server_thread.finished.connect(self.server_thread.deleteLater)
 
         # CLIENT
+        # self.client_thread = QThread()
         self.client_worker = None
 
     def set_config(self, config):
@@ -43,7 +46,15 @@ class ChatManager(QObject):
             self.client_worker.send(text.encode())
 
     def handle_data(self, data):
-        self.message_received.emit(data.decode())
+        msg = decode_message(data)
+        if msg['type'] == "MESSAGE":
+            self.message_received.emit(msg)
+        elif msg['type'] == "FIND_NODES":
+            self.log_received.emit(msg)
+
+            self.client_worker
+        else:
+            pass
 
     def stop(self):
         self.server_worker.stop()
@@ -59,6 +70,15 @@ class ChatManager(QObject):
         for neighbor in neighbors:
             try:
                 self.connect_to_peer(neighbor["ip"], neighbor["port"])
-                self.send_message("Hello")
-            except:
-                print(f"[ERROR] connect to {neighbor["username"]} timeout!")
+                en_message = encode_message(
+                        sender=self.config.user_id,
+                        sender_name = self.config.username,
+                        receiver="",
+                        content="Ping!",
+                        message_type="FIND_NODES"
+                    )
+                print(en_message)
+                self.send_message(en_message)
+            except Exception as err:
+                # print(f"[ERROR] connect to {neighbor["username"]} timeout!")
+                print(f"[ERROR]", str(err))

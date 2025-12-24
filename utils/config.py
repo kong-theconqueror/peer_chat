@@ -11,6 +11,7 @@ class Config:
         self.username = "anonymous"
         self.user_id = ""
         self.node = ""
+        self.ttl = 5
     
     def load_config(self):
         try:
