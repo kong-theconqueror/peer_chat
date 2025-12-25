@@ -2,6 +2,7 @@
     "ip": "127.0.0.1",
     "port": 8083,
     "username": "user_D",
-    "user_id": "ec608959-c392-4c2f-a077-bb615a92b0ff",
-    "node": "D"
+    "peer_id": "b17c24ac-45af-41e8-99ca-2526a41b4c31",
+    "node": "D",
+    "ttl": 5
 }

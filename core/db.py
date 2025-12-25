@@ -22,7 +22,7 @@ class ChatDatabase:
 
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS neighbor (
-            user_id TEXT ,          -- UUID
+            peer_id TEXT ,          -- UUID
             username TEXT,
             ip TEXT NOT NULL,
             port INTEGER NOT NULL,
@@ -63,7 +63,7 @@ class ChatDatabase:
         cursor = self.conn.cursor()
 
         cursor.execute("""
-            SELECT user_id, username, ip, port, last_seen, status
+            SELECT peer_id, username, ip, port, last_seen, status
             FROM neighbor
             ORDER BY status DESC, last_seen DESC
         """)

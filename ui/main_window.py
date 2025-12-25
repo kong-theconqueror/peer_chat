@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QComboBox, QLineEdit, QMessageBox
 )
 from ui.chat_window import ChatWindow
-from core.chat_manager import ChatManager
+from core.chat_manager_2 import ChatManager
 from utils.config import Config
 from core.db import ChatDatabase
 
@@ -15,7 +15,7 @@ class MainWindow(QMainWindow):
         self.resize(300, 200)
         self.app_config = {}
 
-        self.chat_manager = ChatManager()
+        self.chat_manager = None
 
         self.lbl_node = QLabel("Select Node:")
         self.combo_node = QComboBox()
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
             self.app_config.username = username
             self.app_config.save_config()
             
-            self.chat_manager.set_config(self.app_config)
+            self.chat_manager = ChatManager(self.app_config)
             self.chat_manager.start()
         
         self.chat_window = ChatWindow(self.chat_manager)

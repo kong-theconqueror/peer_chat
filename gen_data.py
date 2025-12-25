@@ -11,7 +11,7 @@ for i in range(0, 13):
         "ip": '127.0.0.1',
         "port": 8080 + i,
         "username": f"user_{node_name}",
-        "user_id": str(uuid4()),
+        "peer_id": str(uuid4()),
         "node": node_name,
         "ttl": 5
     }
@@ -42,11 +42,11 @@ for node in nodes:
 
     print(f"Dictionary successfully saved to {config_path}")
 
-def insert_neighbor(conn, user_id, username, ip, port, status=1):
+def insert_neighbor(conn, peer_id, username, ip, port, status=1):
     conn.execute("""
-    INSERT INTO neighbor (user_id, username, ip, port, status)
+    INSERT INTO neighbor (peer_id, username, ip, port, status)
     VALUES (?, ?, ?, ?, ?)
-    """, (user_id, username, ip, port, status))
+    """, (peer_id, username, ip, port, status))
     conn.commit()
 
 # generate db file
@@ -63,7 +63,7 @@ for node in nodes:
     for j in range(0, len(node_map[index])-1):
         # print("j", j)
         if node_map[index][j] == 1:
-            insert_neighbor(chat_db.conn, nodes[j]["user_id"], nodes[j]["username"], nodes[j]["ip"], nodes[j]["port"], 1)
+            insert_neighbor(chat_db.conn, nodes[j]["peer_id"], nodes[j]["username"], nodes[j]["ip"], nodes[j]["port"], 1)
     
     index += 1
 

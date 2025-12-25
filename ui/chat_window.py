@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QMenuBar, 
+    QMainWindow, QWidget, 
     QVBoxLayout, QHBoxLayout, QSplitter,
     QListWidget, QTextEdit, QLineEdit,
     QPushButton, QAction
@@ -31,6 +31,7 @@ class ChatWindow(QMainWindow):
         # events
         self.chat_manager.message_received.connect(self.message_handle)
         self.chat_manager.log_received.connect(self.log_handle)
+        self.chat_manager.status.connect(self.status_hanndle)
 
     def create_menu(self):
         self.menubar = self.menuBar()
@@ -49,7 +50,7 @@ class ChatWindow(QMainWindow):
         menu_config.addAction(act_exit)
 
         act_find_nodes = QAction("Find Nodes", self)
-        act_find_nodes.triggered.connect(self.chat_manager.find_nodes)
+        # act_find_nodes.triggered.connect(self.chat_manager.find_nodes)
         menu_discover.addAction(act_find_nodes)
 
         menu_about.addAction("About App")
@@ -126,6 +127,9 @@ class ChatWindow(QMainWindow):
 
     def log_handle(self, log):
         self.log_view.append(f'{log["from_n"]}: {log["content"]}')
+    
+    def status_hanndle(self, log):
+        self.log_view.append(log)
 
     def close(self):
         self.chat_manager.stop()

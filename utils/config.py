@@ -9,7 +9,7 @@ class Config:
         self.ip = "0.0.0.0"    
         self.port = 8080
         self.username = "anonymous"
-        self.user_id = ""
+        self.peer_id = ""
         self.node = ""
         self.ttl = 5
     
@@ -20,7 +20,7 @@ class Config:
                 self.ip = config_data["ip"] if "ip" in config_data else "0.0.0.0"
                 self.port = config_data["port"] if "port" in config_data else 0
                 self.username = config_data["username"] if "username" in config_data else ""
-                self.user_id = config_data["user_id"] if "user_id" in config_data else str(uuid4())
+                self.peer_id = config_data["peer_id"] if "peer_id" in config_data else str(uuid4())
                 self.node = config_data["node"] if "node" in config_data else ""
                 
                 print(f"[LOG] Config successfully load from {self.config_path}")
@@ -36,8 +36,9 @@ class Config:
             "ip": self.ip,
             "port": self.port,
             "username": self.username,
-            "user_id": self.user_id,
+            "peer_id": self.peer_id,
             "node": self.node,
+            "ttl": self.ttl
         }
         with open(self.config_path, "w") as f:
             # Use json.dump() to write the dictionary to the file
