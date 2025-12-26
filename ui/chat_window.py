@@ -2,8 +2,8 @@ import sys
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, 
     QVBoxLayout, QHBoxLayout, QSplitter,
-    QListWidget, QTextEdit, QLineEdit,
-    QPushButton, QAction
+    QListWidget, QListWidgetItem, QTextEdit, 
+    QLineEdit, QPushButton, QAction
 )
 from PyQt5.QtCore import Qt
 
@@ -32,7 +32,9 @@ class ChatWindow(QMainWindow):
         self.chat_manager.message_received.connect(self.message_handle)
         self.chat_manager.log_received.connect(self.log_handle)
         self.chat_manager.status.connect(self.status_hanndle)
+        self.chat_manager.update_peers.connect(self.update_peer_list)
 
+    # ---------- UI ----------
     def create_menu(self):
         self.menubar = self.menuBar()
 
@@ -117,6 +119,7 @@ class ChatWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
+    # ---------- Handlers ----------
     def send_message(self):
         msg = self.chat_input.text()
         self.chat_input.clear()
@@ -130,6 +133,13 @@ class ChatWindow(QMainWindow):
     
     def status_hanndle(self, log):
         self.log_view.append(log)
+    
+    def update_peer_list(self, peers):
+        self.node_list.clear()
+        for peer in peers:
+            item = QListWidgetItem(f'{peer["username"]}')
+            item.setData(Qt.UserRole, peer)
+            self.node_list.addItem(item)
 
     def close(self):
         self.chat_manager.stop()

@@ -2,15 +2,16 @@ import socket
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 class ClientWorker(QObject):
-    connected = pyqtSignal()
+    connected = pyqtSignal(str)
     disconnected = pyqtSignal()
     new_data = pyqtSignal(bytes)
     send_data = pyqtSignal(bytes)
     status = pyqtSignal(str)
     finished = pyqtSignal()
 
-    def __init__(self, host=None, port=None, sock=None, timeout=3, retry_interval=5000):
+    def __init__(self, peer_id=None, host=None, port=None, sock=None, timeout=3, retry_interval=5000):
         super().__init__()
+        self.peer_id = peer_id
         self.host = host
         self.port = port
         self.sock = sock
@@ -50,7 +51,7 @@ class ClientWorker(QObject):
 
             self.running = True
             self.status.emit(f"[CLIENT] Connected to {self.host}:{self.port}")
-            self.connected.emit()
+            self.connected.emit(self.peer_id)
 
             self.listen()   # blocking recv loop
 
@@ -111,7 +112,8 @@ class ClientWorker(QObject):
 
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
-        except:
+        except Exception as e:
+            print('[ERROR]', str(e))
             pass
 
         self.finished.emit()

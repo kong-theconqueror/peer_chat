@@ -8,6 +8,7 @@ from core.db import ChatDatabase
 class ChatManager(QObject):
     message_received = pyqtSignal(dict)
     log_received = pyqtSignal(str)
+    update_peers = pyqtSignal(list)
     status = pyqtSignal(str)
 
     def __init__(self, config):
@@ -40,13 +41,14 @@ class ChatManager(QObject):
         self.status.emit(f"Create client: {peer_id} {host}:{port}")
 
         thread = QThread()
-        worker = ClientWorker(host, port)
+        worker = ClientWorker(peer_id, host, port)
 
         worker.moveToThread(thread)
         thread.started.connect(worker.connect_to_peer)
 
         worker.new_data.connect(self.handle_incoming)
         worker.status.connect(self.status.emit)
+        worker.connected.connect(self.add_active_peer)  # peer_id
 
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
@@ -69,6 +71,14 @@ class ChatManager(QObject):
         for neigbor in self.neigbors:
             peer_id = neigbor["peer_id"]
             self.init_client(peer_id, neigbor["ip"], neigbor["port"])
+
+    # add active peer to list
+    def add_active_peer(self, peer_id):
+        for neigbor in self.neigbors:
+            if neigbor["peer_id"] == peer_id and peer_id not in self.active_peer:
+                self.active_peer.append(neigbor)
+                self.update_peers.emit(self.active_peer)
+                break
 
     def remove_peer(self, peer_id):
         if peer_id in self.clients:
