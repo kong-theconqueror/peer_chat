@@ -3,7 +3,7 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 class ClientWorker(QObject):
     connected = pyqtSignal(str)
-    disconnected = pyqtSignal()
+    disconnected = pyqtSignal(str)
     new_data = pyqtSignal(bytes)
     send_data = pyqtSignal(bytes)
     status = pyqtSignal(str)
@@ -97,7 +97,9 @@ class ClientWorker(QObject):
         if not self.running:
             return
         try:
+            print(f'[CLIENT] Sending data to {self.peer_id}', data)
             self.sock.sendall(data)
+            print(f'[CLIENT] Data sent to {self.peer_id}')
         except Exception as e:
             self.running = False
             self.status.emit(str(e))
@@ -113,7 +115,7 @@ class ClientWorker(QObject):
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
         except Exception as e:
-            print('[ERROR]', str(e))
+            print('[STOP ERROR]', str(e))
             pass
 
         self.finished.emit()
@@ -122,7 +124,7 @@ class ClientWorker(QObject):
     def _cleanup(self, retry=False):
         if self.running:
             self.running = False
-            self.disconnected.emit()
+            self.disconnected.emit(self.peer_id)
 
         try:
             self.sock.close()

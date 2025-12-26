@@ -3,6 +3,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 class ServerWorker(QObject):
     new_connection = pyqtSignal(object)   # socket
+    new_data = pyqtSignal(bytes)
     status = pyqtSignal(str)
     finished = pyqtSignal()
 
@@ -25,13 +26,19 @@ class ServerWorker(QObject):
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind((self.host, self.port))
             self.sock.listen()
-            # self.sock.settimeout(1.0)   # 01 secound
+            self.sock.settimeout(1.0)   # 1 secound
         
             self.status.emit(f"[SERVER] Listening on {self.host}:{self.port}")
             self.running = True
 
             while self.running:
-                conn, addr = self.sock.accept()
+                try:
+                    conn, addr = self.sock.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    # socket was closed or invalid
+                    break
                 self.status.emit(f"[SERVER] Peer connected: {addr}")
                 self.new_connection.emit(conn)
                 self.handle_client(conn)
@@ -42,7 +49,7 @@ class ServerWorker(QObject):
             self.stop()
 
     def handle_client(self, conn):
-        # conn.settimeout(1.0)
+        conn.settimeout(1.0)
         while self.running:
             try:
                 data = conn.recv(1024)
@@ -51,12 +58,25 @@ class ServerWorker(QObject):
                 self.new_data.emit(data)
             except socket.timeout:
                 continue
-        conn.close()
+            except OSError:
+                break
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def stop(self):
         self.running = False
         try:
-            self.sock.close()
-        except:
+            if self.sock:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+                self.sock.close()
+                self.sock = None
+        except Exception as e:
+            print('[SERVER_ERROR] Error closing server socket', str(e))
             pass
         self.finished.emit()
+

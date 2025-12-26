@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, 
     QVBoxLayout, QHBoxLayout, QSplitter,
-    QListWidget, QListWidgetItem, QTextEdit, 
+    QLabel, QListWidget, QListWidgetItem, QTextEdit, 
     QLineEdit, QPushButton, QAction
 )
 from PyQt5.QtCore import Qt
@@ -80,9 +80,13 @@ class ChatWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout()
 
+        title = QLabel("User List")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+
         self.node_list = QListWidget()
         # self.node_list.addItems(["Node A", "Node B", "Node C"])
 
+        layout.addWidget(title)
         layout.addWidget(self.node_list)
         widget.setLayout(layout)
         return widget
@@ -91,6 +95,9 @@ class ChatWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout()
 
+        title = QLabel("Chat box")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+
         self.chat_view = QTextEdit()
         self.chat_view.setReadOnly(True)
 
@@ -98,10 +105,12 @@ class ChatWindow(QMainWindow):
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText("Type message...")
         self.btn_send = QPushButton("Send")
+        self.btn_send.clicked.connect(self.send_message)
 
         input_layout.addWidget(self.chat_input)
         input_layout.addWidget(self.btn_send)
 
+        layout.addWidget(title)
         layout.addWidget(self.chat_view)
         layout.addLayout(input_layout)
 
@@ -111,10 +120,14 @@ class ChatWindow(QMainWindow):
     def create_log_panel(self):
         widget = QWidget()
         layout = QVBoxLayout()
-
+        
+        title = QLabel("Logs")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
 
+        layout.addWidget(title)
         layout.addWidget(self.log_view)
         widget.setLayout(layout)
         return widget
@@ -123,10 +136,11 @@ class ChatWindow(QMainWindow):
     def send_message(self):
         msg = self.chat_input.text()
         self.chat_input.clear()
-        self.chat_manager.send_message(msg)
+        # self.chat_manager.send_message(msg)
+        self.chat_manager.send_broadcast_message(msg)
 
     def message_handle(self, msg):
-        self.chat_view.append(msg["content"])
+        self.chat_view.append(f'{msg["from_n"]}: {msg["content"]}')
 
     def log_handle(self, log):
         self.log_view.append(f'{log["from_n"]}: {log["content"]}')

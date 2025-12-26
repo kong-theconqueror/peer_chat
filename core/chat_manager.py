@@ -1,7 +1,7 @@
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from uuid import uuid4
 from network.client_worker import ClientWorker
-from network.server_worker import ServerWorker
+from network.server_worker_2 import ServerWorker
 from network.protocol import encode_message, decode_message
 from core.db import ChatDatabase
 
@@ -49,12 +49,14 @@ class ChatManager(QObject):
         worker.new_data.connect(self.handle_incoming)
         worker.status.connect(self.status.emit)
         worker.connected.connect(self.add_active_peer)  # peer_id
+        worker.disconnected.connect(self.remove_active_peer)  # peer_id
 
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
-        worker.finished.connect(lambda: self.remove_peer(peer_id))
+        # ensure we remove worker safely when it finishes
+        worker.finished.connect(lambda pid=peer_id: self._on_worker_finished(pid))
 
         self.clients[peer_id] = {
             "thread": thread,
@@ -79,10 +81,47 @@ class ChatManager(QObject):
                 self.active_peer.append(neigbor)
                 self.update_peers.emit(self.active_peer)
                 break
+    
+    # remove active peer to list
+    def remove_active_peer(self, peer_id):
+        for peer in self.active_peer:
+            if peer["peer_id"] == peer_id:
+                self.active_peer.remove(peer)
+                self.update_peers.emit(self.active_peer)
+                break
 
     def remove_peer(self, peer_id):
+        """Safely stop worker thread and remove peer entry."""
+        obj = self.clients.get(peer_id)
+        if not obj:
+            return
+
+        thread = obj.get("thread")
+        worker = obj.get("worker")
+
+        try:
+            # Ask worker to stop
+            if worker:
+                worker.stop()
+        except Exception:
+            pass
+
+        try:
+            # Quit and wait for thread to finish
+            if thread:
+                thread.quit()
+                thread.wait(2000)
+        except Exception:
+            pass
+    
+        # Finally remove reference
         if peer_id in self.clients:
             del self.clients[peer_id]
+
+    def _on_worker_finished(self, peer_id):
+        """Callback when a worker emits finished; ensure it's cleaned up."""
+        # Ensure cleanup is performed in main thread context
+        self.remove_peer(peer_id)
 
     def send_message(self, peer_id, text):
         if peer_id not in self.clients:
@@ -98,8 +137,31 @@ class ChatManager(QObject):
 
         self.clients[peer_id]["worker"].send_data.emit(packet)
 
+    def send_broadcast_message(self, text):
+        """Broadcast MESSAGE to all connected peers (safe iteration)."""
+        for peer_id, obj in list(self.clients.items()):
+            if obj["worker"].running is False:
+                continue
+            try:
+                packet = encode_message(
+                    sender=self.config.peer_id,
+                    receiver="",
+                    content=text,
+                    message_type="MESSAGE"
+                )
+                print(f'[LOG] Broadcasting message to {peer_id}: {text}')
+                try:
+                    obj["worker"].send_data.emit(packet)
+                except Exception as e:
+                    print(f'[ERROR] Failed to send MESSAGE to {peer_id}: {e}')
+            except Exception as e:
+                print(f'[ERROR] send_broadcast_message failure for {peer_id}: {e}')
+
     def find_nodes(self):
-        for peer_id, obj in self.clients.items():
+        """Broadcast FIND_NODES to all connected peers (safe iteration).
+        Iterate over a snapshot to avoid mutation during callbacks.
+        """
+        for peer_id, obj in list(self.clients.items()):
             try:
                 packet = encode_message(
                     sender=self.config.peer_id,
@@ -108,20 +170,25 @@ class ChatManager(QObject):
                     message_type="FIND_NODES"
                 )
 
-                obj["worker"].send_data.emit(packet)
+                try:
+                    obj["worker"].send_data.emit(packet)
+                except Exception as e:
+                    print(f'[ERROR] Failed to send FIND_NODES to {peer_id}: {e}')
             except Exception as e:
-                print('[ERROR]', str(e))
+                print(f'[ERROR] find_nodes failure for {peer_id}: {e}')
         
     def handle_incoming(self, raw: bytes):
         msg = decode_message(raw)
+        print(f'[LOG] Received message: {msg}')
 
         msg_id = msg["message_id"]
+        # Check if we've seen this message before to prevent loops
         if msg_id in self.seen_messages:
             return
         self.seen_messages.add(msg_id)
 
         msg_type = msg["type"]
-
+        # Dispatch based on message type
         if msg_type == "MESSAGE":
             self.message_received.emit(msg)
 
@@ -143,7 +210,10 @@ class ChatManager(QObject):
         )
 
         if sender in self.clients:
-            self.clients[sender]["worker"].send_data.emit(ack)
+            try:
+                self.clients[sender]["worker"].send_data.emit(ack)
+            except Exception as e:
+                print(f"[ERROR] Failed to send ACK to {sender}: {e}")
 
         if ttl <= 0:
             return
@@ -157,10 +227,12 @@ class ChatManager(QObject):
             message_id=msg["message_id"]
         )
 
-        for peer_id, obj in self.clients.items():
+        for peer_id, obj in list(self.clients.items()):
             if peer_id != sender:
-                obj["worker"].send_data.emit(forward)
-
+                try:
+                    obj["worker"].send_data.emit(forward)
+                except Exception as e:
+                    print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
 
     def stop(self):
         self.server_worker.stop()
