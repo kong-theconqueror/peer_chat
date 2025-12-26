@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QComboBox, QLineEdit, QMessageBox
 )
 from ui.chat_window import ChatWindow
-from core.chat_manager_2 import ChatManager
+from core.chat_manager import ChatManager
 from utils.config import Config
 from core.db import ChatDatabase
 
@@ -25,6 +25,10 @@ class MainWindow(QMainWindow):
         self.lbl_user = QLabel("Username:")
         self.input_user = QLineEdit()
         self.input_user.setPlaceholderText("Enter your username")
+
+        self.app_config = Config(f'A.json')
+        self.app_config.load_config()
+        self.input_user.setText(self.app_config.username)
 
         self.btn_open_chat = QPushButton("Start Chat")
         self.btn_open_chat.clicked.connect(self.open_chat)
