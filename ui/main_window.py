@@ -1,6 +1,6 @@
 import os
 from PyQt5.QtWidgets import (
-    QMainWindow, QPushButton, QVBoxLayout,
+    QApplication, QMainWindow, QPushButton, QVBoxLayout,
     QWidget, QLabel, QComboBox, QLineEdit, QMessageBox
 )
 from ui.chat_window import ChatWindow
@@ -60,6 +60,8 @@ class MainWindow(QMainWindow):
             
             self.chat_manager = ChatManager(self.app_config)
             self.chat_manager.start()
+            # ensure clean shutdown
+            QApplication.instance().aboutToQuit.connect(self.chat_manager.stop)
         
         self.chat_window = ChatWindow(self.chat_manager)
         self.chat_window.setWindowTitle(f'Peer Chat - Node {self.app_config.node}')

@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QTextEdit, QLineEdit,
     QPushButton, QAction
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 class ChatWindow(QMainWindow):
     def __init__(self, chat_manager):
@@ -80,9 +80,16 @@ class ChatWindow(QMainWindow):
 
         self.node_list = QListWidget()
         # self.node_list.addItems(["Node A", "Node B", "Node C"])
+        self.node_list.itemClicked.connect(self.on_node_selected)
 
         layout.addWidget(self.node_list)
         widget.setLayout(layout)
+
+        # refresh node list periodically so it reflects connected clients
+        self.node_list_timer = QTimer(self)
+        self.node_list_timer.timeout.connect(self.update_node_list)
+        self.node_list_timer.start(1000)
+
         return widget
     
     def create_chat_panel(self):
@@ -96,6 +103,7 @@ class ChatWindow(QMainWindow):
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText("Type message...")
         self.btn_send = QPushButton("Send")
+        self.btn_send.clicked.connect(self.send_message)
 
         input_layout.addWidget(self.chat_input)
         input_layout.addWidget(self.btn_send)
@@ -118,12 +126,28 @@ class ChatWindow(QMainWindow):
         return widget
 
     def send_message(self):
-        msg = self.chat_input.text()
+        msg = self.chat_input.text().strip()
+        if not msg:
+            return
+
+        # determine selected peer
+        peer_id = getattr(self, 'selected_peer_id', None)
+        if not peer_id:
+            self.log_view.append("Select a peer to send message to.")
+            return
+
         self.chat_input.clear()
-        self.chat_manager.send_message(msg)
+        try:
+            self.chat_manager.send_message(peer_id, msg)
+            self.chat_view.append(f"Me -> {peer_id[:8]}: {msg}")
+        except Exception as e:
+            self.log_view.append(f"Failed to send: {e}")
 
     def message_handle(self, msg):
-        self.chat_view.append(msg["content"])
+        # display incoming message
+        sender = msg.get('from', '')
+        display = f"{sender[:8]}: {msg.get('content', '')}"
+        self.chat_view.append(display)
 
     def log_handle(self, log):
         self.log_view.append(f'{log["from_n"]}: {log["content"]}')
@@ -131,7 +155,29 @@ class ChatWindow(QMainWindow):
     def status_hanndle(self, log):
         self.log_view.append(log)
 
-    def close(self):
-        self.chat_manager.stop()
-        super().__init__()
+    def update_node_list(self):
+        # Refresh node list to reflect current clients in ChatManager
+        current_keys = set(self.chat_manager.clients.keys())
+        displayed = set(self.node_list.item(i).text() for i in range(self.node_list.count()))
+
+        # Add new
+        for key in current_keys - displayed:
+            # show short id for readability
+            self.node_list.addItem(key)
+
+        # Remove missing
+        for item_text in list(displayed - current_keys):
+            items = self.node_list.findItems(item_text, Qt.MatchExactly)
+            for it in items:
+                idx = self.node_list.row(it)
+                self.node_list.takeItem(idx)
+
+    def on_node_selected(self, item):
+        self.selected_peer_id = item.text()
+        self.log_view.append(f"Selected peer: {self.selected_peer_id}")
+
+    def closeEvent(self, event):
+        if hasattr(self, 'chat_manager') and self.chat_manager:
+            self.chat_manager.stop()
+        super().closeEvent(event)
     
