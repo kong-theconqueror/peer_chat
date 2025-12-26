@@ -50,7 +50,7 @@ class ChatWindow(QMainWindow):
         menu_config.addAction(act_exit)
 
         act_find_nodes = QAction("Find Nodes", self)
-        # act_find_nodes.triggered.connect(self.chat_manager.find_nodes)
+        act_find_nodes.triggered.connect(self.chat_manager.find_nodes)
         menu_discover.addAction(act_find_nodes)
 
         menu_about.addAction("About App")
@@ -134,3 +134,4 @@ class ChatWindow(QMainWindow):
     def close(self):
         self.chat_manager.stop()
         super().__init__()
+    

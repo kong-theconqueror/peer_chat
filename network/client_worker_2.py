@@ -100,6 +100,7 @@ class ClientWorker(QObject):
         except Exception as e:
             self.running = False
             self.status.emit(str(e))
+            print('[ERROR]', str(e))
             self._cleanup(retry=True)
 
     # ---------- stop ----------

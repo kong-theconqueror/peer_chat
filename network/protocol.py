@@ -15,7 +15,7 @@ def encode_message(sender, receiver, content, sender_name="", receiver_name="", 
         "timestamp": int(time.time())
     })
     print(en_msg_str)
-    return en_msg_str
+    return en_msg_str.encode("utf-8")
 
 def decode_message(data):
     return json.loads(data.decode("utf-8"))

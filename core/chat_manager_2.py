@@ -80,7 +80,7 @@ class ChatManager(QObject):
             return
 
         packet = encode_message(
-            sender=self.config.node_id,
+            sender=self.config.peer_id,
             receiver=peer_id,
             content=text,
             message_type="MESSAGE"
@@ -88,6 +88,20 @@ class ChatManager(QObject):
 
         self.clients[peer_id]["worker"].send_data.emit(packet)
 
+    def find_nodes(self):
+        for peer_id, obj in self.clients.items():
+            try:
+                packet = encode_message(
+                    sender=self.config.peer_id,
+                    receiver=peer_id,
+                    content="",
+                    message_type="FIND_NODES"
+                )
+
+                obj["worker"].send_data.emit(packet)
+            except Exception as e:
+                print('[ERROR]', str(e))
+        
     def handle_incoming(self, raw: bytes):
         msg = decode_message(raw)
 
@@ -112,7 +126,7 @@ class ChatManager(QObject):
         sender = msg["from"]
 
         ack = encode_message(
-            sender=self.config.node_id,
+            sender=self.config.peer_id,
             receiver=sender,
             content="ACK",
             message_type="FIND_ACK"
@@ -142,3 +156,8 @@ class ChatManager(QObject):
         self.server_worker.stop()
         self.server_thread.quit()
         self.server_thread.wait()
+
+        for peer_id, obj in self.clients.items():
+            obj["worker"].stop()
+            obj["thread"].quit()
+            obj["thread"].wait()
