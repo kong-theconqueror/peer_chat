@@ -1,13 +1,16 @@
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, QTimer
 from uuid import uuid4
+import os
+import json
 from network.client_worker_2 import ClientWorker
 from network.server_worker_2 import ServerWorker
 from network.protocol import encode_message, decode_message
 from core.db import ChatDatabase
 
 class ChatManager(QObject):
-    message_received = pyqtSignal(dict)
-    log_received = pyqtSignal(str)
+    # Use object for signals that may carry dicts or other payloads across threads
+    message_received = pyqtSignal(object)
+    log_received = pyqtSignal(object)
     status = pyqtSignal(str)
 
     def __init__(self, config):
@@ -65,12 +68,30 @@ class ChatManager(QObject):
         thread.start()
 
     def start(self):
+        """Start server, ensure neighbors exist, start clients, and run auto-discover."""
         self.init_server()
         self.server_thread.start()
 
+        # ensure neighbor list exists in DB (populate from config files if missing)
+        self._ensure_neighbors()
+
+        # refresh neighbors after ensuring
+        self.neigbors = self.db.get_neighbors()
+
+        # start clients for neighbors (staggered starts could be added)
         for neigbor in self.neigbors:
             peer_id = neigbor["peer_id"]
             self.init_client(peer_id, neigbor["ip"], neigbor["port"])
+
+        # schedule an automatic FIND_NODES after a short delay so running peers discover network
+        QTimer.singleShot(5000, self.find_nodes)
+        self.status.emit("Auto-discover scheduled in 5s")
+
+        # monitor clients periodically and ensure peers are connected (helps detect nodes that restart)
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.timeout.connect(self._monitor_clients)
+        self.monitor_timer.start(3000)
+        self.status.emit("Client monitor started (interval 3s)")
 
     def remove_peer(self, peer_id):
         """Safely stop worker thread and remove peer entry."""
@@ -105,9 +126,90 @@ class ChatManager(QObject):
         # Ensure cleanup is performed in main thread context
         self.remove_peer(peer_id)
 
+    def _ensure_neighbors(self):
+        """Populate neighbor DB from config files if none exist."""
+        try:
+            neighbors = self.db.get_neighbors()
+            print(f"[DEBUG] Current neighbors in DB: {len(neighbors)}")
+
+            if neighbors:
+                for n in neighbors:
+                    print(f"[DEBUG] Existing neighbor: {n}")
+                return
+
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            config_dir = os.path.join(app_dir, '..', 'config')
+            print(f"[DEBUG] Looking for configs in: {config_dir}")
+
+            if not os.path.isdir(config_dir):
+                print(f"[DEBUG] Config directory does not exist: {config_dir}")
+                return
+
+            # List config files
+            config_files = [f for f in os.listdir(config_dir) if f.endswith('.json')]
+            print(f"[DEBUG] Found config files: {config_files}")
+
+            # insert all configs except self into DB
+            for fname in config_files:
+                full = os.path.join(config_dir, fname)
+                try:
+                    with open(full, 'r') as f:
+                        cfg = json.load(f)
+                    # skip self
+                    if cfg.get('peer_id') == self.config.peer_id:
+                        print(f"[DEBUG] Skipping self config file: {fname}")
+                        continue
+                    # insert neighbor if not exists
+                    cur = self.db.conn.cursor()
+                    cur.execute("SELECT count(*) FROM neighbor WHERE peer_id=?", (cfg.get('peer_id'),))
+                    if cur.fetchone()[0] == 0:
+                        cur.execute("INSERT INTO neighbor (peer_id, username, ip, port, status) VALUES (?, ?, ?, ?, 1)",
+                                    (cfg.get('peer_id'), cfg.get('username'), cfg.get('ip'), cfg.get('port')))
+                        self.db.conn.commit()
+                        print(f"[DEBUG] Inserted neighbor {cfg.get('peer_id')} from {fname}")
+                except Exception as e:
+                    print(f"[DEBUG] Failed to process config {full}: {e}")
+                    continue
+        except Exception as e:
+            print(f"[DEBUG] _ensure_neighbors failed: {e}")
+
+    def _monitor_clients(self):
+        """Periodic check to recreate missing clients and trigger reconnects for neighbors.
+        This helps detect peers that were restarted after this node started.
+        """
+        try:
+            neighbors = self.db.get_neighbors()
+            for nb in neighbors:
+                peer_id = nb.get("peer_id")
+                if peer_id == self.config.peer_id:
+                    continue
+
+                # If client record is missing, recreate it
+                if peer_id not in self.clients:
+                    self.status.emit(f"Recreating client for {peer_id[:8]} {nb.get('ip')}:{nb.get('port')}")
+                    self.init_client(peer_id, nb.get('ip'), nb.get('port'))
+                else:
+                    # If worker exists but is not running and its thread has stopped, recreate to ensure clean state
+                    worker = self.clients[peer_id].get('worker')
+                    thread = self.clients[peer_id].get('thread')
+                    try:
+                        if worker and not getattr(worker, 'running', False):
+                            if thread and not thread.isRunning():
+                                # thread finished previously; recreate
+                                self.remove_peer(peer_id)
+                                self.init_client(peer_id, nb.get('ip'), nb.get('port'))
+                    except Exception as e:
+                        print(f"[DEBUG] _monitor_clients error for {peer_id}: {e}")
+        except Exception as e:
+            print(f"[DEBUG] _monitor_clients failed: {e}")
     def send_message(self, peer_id, text):
         if peer_id not in self.clients:
             self.status.emit("Peer not connected")
+            return
+
+        worker = self.clients[peer_id]["worker"]
+        if not getattr(worker, 'running', False):
+            self.status.emit("Peer is not connected yet")
             return
 
         packet = encode_message(
@@ -117,7 +219,12 @@ class ChatManager(QObject):
             message_type="MESSAGE"
         )
 
-        self.clients[peer_id]["worker"].send_data.emit(packet)
+        try:
+            worker.send_data.emit(packet)
+            self.status.emit(f"Message sent to {peer_id[:8]}")
+        except Exception as e:
+            self.status.emit(f"Failed to send: {e}")
+            print(f"[ERROR] send_message failed for {peer_id}: {e}")
 
     def find_nodes(self):
         """Broadcast FIND_NODES to all connected peers (safe iteration).
@@ -142,6 +249,12 @@ class ChatManager(QObject):
     def handle_incoming(self, raw: bytes):
         msg = decode_message(raw)
 
+        # log incoming raw message for debugging
+        try:
+            self.status.emit(f"[INCOMING] {msg}")
+        except Exception:
+            pass
+
         msg_id = msg["message_id"]
         if msg_id in self.seen_messages:
             return
@@ -156,7 +269,11 @@ class ChatManager(QObject):
             self.handle_find_nodes(msg)
 
         elif msg_type == "FIND_ACK":
-            self.log_received.emit(f"Found node: {msg['from']}")
+            # emit a structured log so UI can show from_n and content
+            self.log_received.emit({
+                'from_n': msg.get('from'),
+                'content': f"Found node: {msg.get('from')}"
+            })
 
     def handle_find_nodes(self, msg):
         ttl = msg["ttl"] - 1
@@ -204,3 +321,10 @@ class ChatManager(QObject):
             obj["worker"].stop()
             obj["thread"].quit()
             obj["thread"].wait()
+
+        # stop monitor timer if running
+        if hasattr(self, 'monitor_timer'):
+            try:
+                self.monitor_timer.stop()
+            except Exception:
+                pass

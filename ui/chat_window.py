@@ -1,9 +1,10 @@
 import sys
+import html
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, 
     QVBoxLayout, QHBoxLayout, QSplitter,
     QListWidget, QTextEdit, QLineEdit,
-    QPushButton, QAction
+    QPushButton, QAction, QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
 
@@ -139,41 +140,91 @@ class ChatWindow(QMainWindow):
         self.chat_input.clear()
         try:
             self.chat_manager.send_message(peer_id, msg)
-            self.chat_view.append(f"Me -> {peer_id[:8]}: {msg}")
+            # render the message on the right (owner)
+            self.append_me(msg)
         except Exception as e:
             self.log_view.append(f"Failed to send: {e}")
 
     def message_handle(self, msg):
-        # display incoming message
-        sender = msg.get('from', '')
-        display = f"{sender[:8]}: {msg.get('content', '')}"
-        self.chat_view.append(display)
+        # display incoming message using HTML renderer
+        try:
+            sender = ''
+            content = ''
+            if isinstance(msg, dict):
+                sender = msg.get('from_n') or msg.get('from', '')
+                content = msg.get('content', '')
+            else:
+                content = str(msg)
+
+            self.append_other(sender, content)
+        except Exception as e:
+            self.log_view.append(f"Error in message_handle: {e}")
+
+    def append_other(self, sender, msg):
+        """Render another user's message (left aligned) using simple HTML/CSS styles."""
+        try:
+            safe_sender = html.escape(sender[:8]) if sender else ''
+            safe_msg = html.escape(msg).replace('\n', '<br>')
+            html_msg = f"""
+<div style="background:#f1f1f1;padding:8px 12px;border-radius:10px;margin:6px;max-width:70%;float:left;clear:both;">
+<b>{safe_sender}</b><br>
+{safe_msg}
+</div>
+"""
+            self.chat_view.append(html_msg)
+        except Exception as e:
+            self.log_view.append(f"Error in append_other: {e}")
+
+    def append_me(self, msg):
+        """Render my message (right aligned) using simple HTML/CSS styles."""
+        try:
+            safe_msg = html.escape(msg).replace('\n', '<br>')
+            html_msg = f"""
+<div style="background:#dcf8c6;padding:8px 12px;border-radius:10px;margin:6px;max-width:70%;float:right;clear:both;text-align:right;">
+{safe_msg}
+</div>
+"""
+            self.chat_view.append(html_msg)
+        except Exception as e:
+            self.log_view.append(f"Error in append_me: {e}")
 
     def log_handle(self, log):
-        self.log_view.append(f'{log["from_n"]}: {log["content"]}')
+        # Accept either a dict with from_n/content or a plain string
+        if isinstance(log, dict):
+            self.log_view.append(f'{log.get("from_n","")}: {log.get("content","")}')
+            return
+
+        # try to parse JSON string
+        try:
+            import json
+            parsed = json.loads(log)
+            if isinstance(parsed, dict):
+                self.log_view.append(f'{parsed.get("from_n","")}: {parsed.get("content","")}')
+                return
+        except Exception:
+            pass
+
+        # fallback: show raw string
+        self.log_view.append(str(log))
     
     def status_hanndle(self, log):
         self.log_view.append(log)
 
     def update_node_list(self):
         # Refresh node list to reflect current clients in ChatManager
-        current_keys = set(self.chat_manager.clients.keys())
-        displayed = set(self.node_list.item(i).text() for i in range(self.node_list.count()))
-
-        # Add new
-        for key in current_keys - displayed:
-            # show short id for readability
-            self.node_list.addItem(key)
-
-        # Remove missing
-        for item_text in list(displayed - current_keys):
-            items = self.node_list.findItems(item_text, Qt.MatchExactly)
-            for it in items:
-                idx = self.node_list.row(it)
-                self.node_list.takeItem(idx)
+        # Rebuild items to show live connection status
+        self.node_list.clear()
+        for key, obj in self.chat_manager.clients.items():
+            worker = obj.get("worker")
+            status = "online" if getattr(worker, 'running', False) else "offline"
+            text = f"{key[:8]} - {status}"
+            item = QListWidgetItem(text)
+            item.setData(Qt.UserRole, key)
+            self.node_list.addItem(item)
 
     def on_node_selected(self, item):
-        self.selected_peer_id = item.text()
+        # read real peer id from item data
+        self.selected_peer_id = item.data(Qt.UserRole)
         self.log_view.append(f"Selected peer: {self.selected_peer_id}")
 
     def closeEvent(self, event):

@@ -39,26 +39,37 @@ class ClientWorker(QObject):
     def connect_to_peer(self):
         if self.running or self._stopped:
             return
-        # self.status.emit("[CLIENT] Connecting peer...")
 
-        # print("[CLIENT] Connecting peer...")
+        print(f"[CLIENT DEBUG] Attempting connection to {self.host}:{self.port}")
+        self.status.emit(f"[CLIENT] Connecting to {self.host}:{self.port}")
+
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(self.timeout)
+
+            print(f"[CLIENT DEBUG] Socket created, connecting...")
             self.sock.connect((self.host, self.port))
             self.sock.settimeout(None)
 
             self.running = True
+            print(f"[CLIENT DEBUG] Connected successfully!")
             self.status.emit(f"[CLIENT] Connected to {self.host}:{self.port}")
             self.connected.emit()
 
             self.listen()   # blocking recv loop
 
-        except (socket.timeout, ConnectionRefusedError) as e:
-            # self.status.emit(f"[CLIENT_ERROR] {str(e)}")
+        except socket.timeout as e:
+            print(f"[CLIENT DEBUG] Connection timeout: {e}")
+            self.status.emit(f"[CLIENT] Timeout connecting to {self.host}:{self.port}")
+            self._cleanup(retry=True)
+
+        except ConnectionRefusedError as e:
+            print(f"[CLIENT DEBUG] Connection refused: {e}")
+            self.status.emit(f"[CLIENT] Connection refused by {self.host}:{self.port}")
             self._cleanup(retry=True)
 
         except Exception as e:
+            print(f"[CLIENT DEBUG] Other error: {e}")
             self.status.emit(f"[CLIENT_ERROR] {str(e)}")
             self._cleanup(retry=True)
 
