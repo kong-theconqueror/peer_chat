@@ -202,6 +202,7 @@ class ChatManager(QObject):
                         print(f"[DEBUG] _monitor_clients error for {peer_id}: {e}")
         except Exception as e:
             print(f"[DEBUG] _monitor_clients failed: {e}")
+            
     def send_message(self, peer_id, text):
         if peer_id not in self.clients:
             self.status.emit("Peer not connected")
