@@ -216,7 +216,8 @@ class ChatManager(QObject):
             sender=self.config.peer_id,
             receiver=peer_id,
             content=text,
-            message_type="MESSAGE"
+            message_type="MESSAGE",
+            message_id=str(uuid4())
         )
 
         try:
@@ -263,6 +264,25 @@ class ChatManager(QObject):
         msg_type = msg["type"]
 
         if msg_type == "MESSAGE":
+            # Populate from_n from database if empty (sender's display name)
+            if not msg.get('from_n'):
+                try:
+                    neighbors = self.db.get_neighbors()
+                    for nb in neighbors:
+                        if nb.get('peer_id') == msg.get('from'):
+                            msg['from_n'] = nb.get('username', '')
+                            print(f"[DEBUG] Found sender name: {msg['from_n']}")
+                            break
+                    # Fallback to peer_id prefix if not found
+                    if not msg.get('from_n'):
+                        msg['from_n'] = msg.get('from', 'Unknown')[:8]
+                        print(f"[DEBUG] Using peer_id prefix: {msg['from_n']}")
+                except Exception as e:
+                    print(f"[DEBUG] Failed to look up sender name: {e}")
+                    msg['from_n'] = msg.get('from', 'Unknown')[:8]
+
+            # Emit signal (Qt handles thread-safety automatically)
+            print(f"[DEBUG] Emitting message_received signal")
             self.message_received.emit(msg)
 
         elif msg_type == "FIND_NODES":

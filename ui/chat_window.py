@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QAction, QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 
 class ChatWindow(QMainWindow):
     def __init__(self, chat_manager):
@@ -29,10 +30,11 @@ class ChatWindow(QMainWindow):
         # chat
         self.selected_user = {}
 
-        # events
-        self.chat_manager.message_received.connect(self.message_handle)
-        self.chat_manager.log_received.connect(self.log_handle)
-        self.chat_manager.status.connect(self.status_hanndle)
+        # Connect signals for message display and other events
+        # Qt.QueuedConnection ensures cross-thread safety automatically
+        self.chat_manager.message_received.connect(self.message_handle, Qt.QueuedConnection)
+        self.chat_manager.log_received.connect(self.log_handle, Qt.QueuedConnection)
+        self.chat_manager.status.connect(self.status_hanndle, Qt.QueuedConnection)
 
     def create_menu(self):
         self.menubar = self.menuBar()
@@ -146,43 +148,52 @@ class ChatWindow(QMainWindow):
             self.log_view.append(f"Failed to send: {e}")
 
     def message_handle(self, msg):
-        # display incoming message using HTML renderer
+        # display incoming message from peers only (not our own messages)
         try:
-            sender = ''
-            content = ''
-            if isinstance(msg, dict):
-                sender = msg.get('from_n') or msg.get('from', '')
-                content = msg.get('content', '')
-            else:
-                content = str(msg)
+            print("[UI] message_handle called with:", msg)
+            
+            # Check if this is our own message - if so, ignore it (already displayed via append_me)
+            sender_id = msg.get('from')
+            if sender_id == self.chat_manager.config.peer_id:
+                print(f"[UI] Ignoring own message: {msg.get('message_id')}")
+                return
 
+            content = msg.get('content', '')
+            sender = msg.get('from_n') or sender_id[:8] if sender_id else ''
+            
+            self.log_view.append(f"[MSG RECEIVED] from {sender}: {content}")
             self.append_other(sender, content)
         except Exception as e:
             self.log_view.append(f"Error in message_handle: {e}")
+            print("[ERROR] message_handle exception:", e)
 
     def append_other(self, sender, msg):
-        """Render another user's message (left aligned) using simple HTML/CSS styles."""
+        """Render another user's message (left aligned) using QTextEdit-compatible HTML."""
         try:
             safe_sender = html.escape(sender[:8]) if sender else ''
             safe_msg = html.escape(msg).replace('\n', '<br>')
             html_msg = f"""
-<div style="background:#f1f1f1;padding:8px 12px;border-radius:10px;margin:6px;max-width:70%;float:left;clear:both;">
-<b>{safe_sender}</b><br>
-{safe_msg}
-</div>
+<p align="left" style="margin:6px;">
+  <span style="background:#f1f1f1;padding:8px 12px;border-radius:10px;display:inline-block;max-width:70%;">
+    <b>{safe_sender}</b><br>
+    {safe_msg}
+  </span>
+</p>
 """
             self.chat_view.append(html_msg)
         except Exception as e:
             self.log_view.append(f"Error in append_other: {e}")
 
     def append_me(self, msg):
-        """Render my message (right aligned) using simple HTML/CSS styles."""
+        """Render my message (right aligned) using QTextEdit-compatible HTML."""
         try:
             safe_msg = html.escape(msg).replace('\n', '<br>')
             html_msg = f"""
-<div style="background:#dcf8c6;padding:8px 12px;border-radius:10px;margin:6px;max-width:70%;float:right;clear:both;text-align:right;">
-{safe_msg}
-</div>
+<p align="right" style="margin:6px;">
+  <span style="background:#dcf8c6;padding:8px 12px;border-radius:10px;display:inline-block;max-width:70%;">
+    {safe_msg}
+  </span>
+</p>
 """
             self.chat_view.append(html_msg)
         except Exception as e:
