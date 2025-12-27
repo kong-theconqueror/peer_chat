@@ -1,7 +1,8 @@
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from uuid import uuid4
 from network.client_worker import ClientWorker
-from network.server_worker_2 import ServerWorker
+from network.server_worker import ServerWorker
+from network.server_client_worker import ServerClientWorker
 from network.protocol import encode_message, decode_message
 from core.db import ChatDatabase
 
@@ -15,6 +16,7 @@ class ChatManager(QObject):
         super().__init__()
         self.config = config
         self.clients = {}            # peer_id -> ClientWorker
+        self.server_clients = []     # list ServerClientWorker
         self.seen_messages = set()   # chống loop
 
         self.db = ChatDatabase(f'{self.config.node}.db')
@@ -26,11 +28,12 @@ class ChatManager(QObject):
         self.server_worker = ServerWorker()
         self.server_worker.set_config(self.config)
 
-#         self.server_worker.moveToThread(self.server_thread)
-#         self.server_thread.started.connect(self.server_worker.run)
+        self.server_worker.moveToThread(self.server_thread)
+        self.server_thread.started.connect(self.server_worker.run)
 
-        # self.server_worker.new_connection.connect(self.handle_new_connection)
+        self.server_worker.new_connection.connect(self._on_new_connection)
         self.server_worker.status.connect(self.status.emit)
+        # self.server_worker.new_data.connect(self.handle_incoming)
 
         self.server_worker.finished.connect(self.server_thread.quit)
         self.server_worker.finished.connect(self.server_worker.deleteLater)
@@ -73,6 +76,26 @@ class ChatManager(QObject):
         for neigbor in self.neigbors:
             peer_id = neigbor["peer_id"]
             self.init_client(peer_id, neigbor["ip"], neigbor["port"])
+
+    # Handle new client connection to server
+    def _on_new_connection(self, conn):
+        worker = ServerClientWorker(conn)
+        thread = QThread()
+
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+
+        worker.new_data.connect(self.handle_incoming)
+
+        worker.disconnected.connect(thread.quit)
+        worker.disconnected.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        
+        self.server_clients.append({
+            "thread": thread,
+            "worker": worker
+        })
+        thread.start()
 
     # add active peer to list
     def add_active_peer(self, peer_id):
@@ -139,15 +162,18 @@ class ChatManager(QObject):
 
     def send_broadcast_message(self, text):
         """Broadcast MESSAGE to all connected peers (safe iteration)."""
+        msg_id = str(uuid4())
         for peer_id, obj in list(self.clients.items()):
             if obj["worker"].running is False:
                 continue
             try:
                 packet = encode_message(
                     sender=self.config.peer_id,
+                    sender_name= self.config.username,
                     receiver="",
                     content=text,
-                    message_type="MESSAGE"
+                    message_type="MESSAGE",
+                    message_id=msg_id
                 )
                 print(f'[LOG] Broadcasting message to {peer_id}: {text}')
                 try:
@@ -186,6 +212,9 @@ class ChatManager(QObject):
         if msg_id in self.seen_messages:
             return
         self.seen_messages.add(msg_id)
+        
+        # Forward message to other neigbors
+        self.handle_forward_msg(msg)
 
         msg_type = msg["type"]
         # Dispatch based on message type
@@ -197,6 +226,31 @@ class ChatManager(QObject):
 
         elif msg_type == "FIND_ACK":
             self.log_received.emit(f"Found node: {msg['from']}")
+
+    def handle_forward_msg(self, msg):
+        ttl = msg["ttl"] - 1
+        sender = msg["from"]
+        forwarder = msg["forward"]
+        msg["forward"] = self.config.peer_id
+
+        forward_msg = encode_message(
+            sender=msg["from"],
+            sender_name=msg["from_n"],
+            receiver=msg["to"],
+            receiver_name=msg["to_n"],
+            forwarder=self.config.peer_id,
+            content=msg["content"],
+            ttl=ttl,
+            message_type=msg["type"],
+            message_id=msg["message_id"]
+        )
+
+        for peer_id, obj in list(self.clients.items()):
+            if peer_id != forwarder and peer_id != sender:
+                try:
+                    obj["worker"].send_data.emit(forward_msg)
+                except Exception as e:
+                    print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
 
     def handle_find_nodes(self, msg):
         ttl = msg["ttl"] - 1
@@ -221,6 +275,7 @@ class ChatManager(QObject):
         forward = encode_message(
             sender=msg["from"],
             receiver="*",
+            forwarder=self.config.peer_id,
             content=msg["content"],
             ttl=ttl,
             message_type="FIND_NODES",
@@ -235,11 +290,17 @@ class ChatManager(QObject):
                     print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
 
     def stop(self):
-        self.server_worker.stop()
-        self.server_thread.quit()
-        self.server_thread.wait()
+        if self.server_worker:
+            self.server_worker.stop()
+        if self.server_thread:
+            self.server_thread.quit()
+            self.server_thread.wait()
 
-        for peer_id, obj in self.clients.items():
-            obj["worker"].stop()
-            obj["thread"].quit()
-            obj["thread"].wait()
+        for peer_id in list(self.clients.keys()):
+            entry = self.clients.pop(peer_id, None)
+            if not entry:
+                return
+
+            entry["worker"].stop()
+            entry["thread"].quit()
+            entry["thread"].wait()

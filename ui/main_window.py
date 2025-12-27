@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout,
     QWidget, QLabel, QComboBox, QLineEdit, QMessageBox
 )
-from ui.chat_window_2 import ChatWindow
-from core.chat_manager_2 import ChatManager
+from ui.chat_window import ChatWindow
+from core.chat_manager import ChatManager
 from utils.config import Config
 from core.db import ChatDatabase
 

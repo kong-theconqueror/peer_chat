@@ -1,11 +1,10 @@
-import sys
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, 
     QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QListWidget, QListWidgetItem, QTextEdit, 
     QLineEdit, QPushButton, QAction
 )
-from PyQt5.QtCore import Qt
 
 class ChatWindow(QMainWindow):
     def __init__(self, chat_manager):
@@ -17,13 +16,6 @@ class ChatWindow(QMainWindow):
 
         self.create_menu()
         self.create_ui()
-
-        # layout = QVBoxLayout()
-        # layout.setContentsMargins(0, 0, 0, 0)
-        # layout.setSpacing(0)
-        # layout.addWidget(self.menubar)
-        # layout.addWidget(self.chat_ui)
-        # self.setLayout(layout)
 
         # chat
         self.selected_user = {}
@@ -136,10 +128,12 @@ class ChatWindow(QMainWindow):
     def send_message(self):
         msg = self.chat_input.text()
         self.chat_input.clear()
+        self.chat_view.append(f'{self.chat_manager.config.username}: {msg}')
         # self.chat_manager.send_message(msg)
         self.chat_manager.send_broadcast_message(msg)
 
     def message_handle(self, msg):
+        print("[NEW MESSAGE] ", msg)
         self.chat_view.append(f'{msg["from_n"]}: {msg["content"]}')
 
     def log_handle(self, log):
