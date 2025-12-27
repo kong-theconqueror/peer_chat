@@ -26,8 +26,8 @@ class ChatManager(QObject):
         self.server_worker = ServerWorker()
         self.server_worker.set_config(self.config)
 
-        self.server_worker.moveToThread(self.server_thread)
-        self.server_thread.started.connect(self.server_worker.run)
+#         self.server_worker.moveToThread(self.server_thread)
+#         self.server_thread.started.connect(self.server_worker.run)
 
         # self.server_worker.new_connection.connect(self.handle_new_connection)
         self.server_worker.status.connect(self.status.emit)

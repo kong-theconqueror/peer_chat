@@ -69,5 +69,4 @@ class ChatDatabase:
         """)
 
         neighbors = [dict(row) for row in cursor.fetchall()]
-        self.conn.close()
         return neighbors

@@ -1,9 +1,10 @@
 import socket
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
-class ClientHandlerWorker(QObject):
+class ServerWorker(QObject):
+    new_connection = pyqtSignal(object)   # socket
     new_data = pyqtSignal(bytes)
-    disconnected = pyqtSignal()
+    status = pyqtSignal(str)
     finished = pyqtSignal()
 
     def __init__(self, conn, addr):
@@ -13,29 +14,52 @@ class ClientHandlerWorker(QObject):
         self.running = True
 
     def run(self):
-        self.conn.settimeout(1.0)
+        self.status.emit("[SERVER] Server starting...")
 
-        try:
+        try:    
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind((self.host, self.port))
+            self.sock.listen()
+            self.sock.settimeout(1.0)   # 1 second
+        
+            self.status.emit(f"[SERVER] Listening on {self.host}:{self.port}")
+            self.running = True
+        
             while self.running:
                 try:
-                    data = self.conn.recv(4096)
-                    if not data:
-                        break
-                    self.new_data.emit(data)
-
+                    conn, addr = self.sock.accept()
                 except socket.timeout:
                     continue
                 except OSError:
+                    # socket was closed or invalid
                     break
 
-        finally:
-            self.cleanup()
+                self.status.emit(f"[SERVER] Peer connected: {addr}")
+                self.new_connection.emit(conn)
+                self.handle_client(conn)
 
-    def send(self, data: bytes):
+        except Exception as e:
+            self.status.emit(f'[SERVER_ERROR] {str(e)}')
+        finally:
+            self.stop()
+
+    def handle_client(self, conn):
+        conn.settimeout(1.0)
+        while self.running:
+            try:
+                data = conn.recv(1024)
+                if not data:
+                    break
+                self.new_data.emit(data)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
         try:
-            self.conn.sendall(data)
+            conn.close()
         except Exception:
-            self.cleanup()
+            pass
 
     def stop(self):
         self.running = False
@@ -46,8 +70,14 @@ class ClientHandlerWorker(QObject):
             self.disconnected.emit()
 
         try:
-            self.conn.close()
-        except:
+            if self.sock:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+                self.sock.close()
+                self.sock = None
+        except Exception:
             pass
 
         self.finished.emit()

@@ -2,16 +2,15 @@ import socket
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 class ClientWorker(QObject):
-    connected = pyqtSignal(str)
-    disconnected = pyqtSignal(str)
+    connected = pyqtSignal()
+    disconnected = pyqtSignal()
     new_data = pyqtSignal(bytes)
     send_data = pyqtSignal(bytes)
     status = pyqtSignal(str)
     finished = pyqtSignal()
 
-    def __init__(self, peer_id=None, host=None, port=None, sock=None, timeout=3, retry_interval=5000):
+    def __init__(self, host=None, port=None, sock=None, timeout=3, retry_interval=5000):
         super().__init__()
-        self.peer_id = peer_id
         self.host = host
         self.port = port
         self.sock = sock
@@ -40,26 +39,37 @@ class ClientWorker(QObject):
     def connect_to_peer(self):
         if self.running or self._stopped:
             return
-        # self.status.emit("[CLIENT] Connecting peer...")
 
-        # print("[CLIENT] Connecting peer...")
+        print(f"[CLIENT DEBUG] Attempting connection to {self.host}:{self.port}")
+        self.status.emit(f"[CLIENT] Connecting to {self.host}:{self.port}")
+
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(self.timeout)
+
+            print(f"[CLIENT DEBUG] Socket created, connecting...")
             self.sock.connect((self.host, self.port))
             self.sock.settimeout(None)
 
             self.running = True
+            print(f"[CLIENT DEBUG] Connected successfully!")
             self.status.emit(f"[CLIENT] Connected to {self.host}:{self.port}")
-            self.connected.emit(self.peer_id)
+            self.connected.emit()
 
             self.listen()   # blocking recv loop
 
-        except (socket.timeout, ConnectionRefusedError) as e:
-            # self.status.emit(f"[CLIENT_ERROR] {str(e)}")
+        except socket.timeout as e:
+            print(f"[CLIENT DEBUG] Connection timeout: {e}")
+            self.status.emit(f"[CLIENT] Timeout connecting to {self.host}:{self.port}")
+            self._cleanup(retry=True)
+
+        except ConnectionRefusedError as e:
+            print(f"[CLIENT DEBUG] Connection refused: {e}")
+            self.status.emit(f"[CLIENT] Connection refused by {self.host}:{self.port}")
             self._cleanup(retry=True)
 
         except Exception as e:
+            print(f"[CLIENT DEBUG] Other error: {e}")
             self.status.emit(f"[CLIENT_ERROR] {str(e)}")
             self._cleanup(retry=True)
 
@@ -97,9 +107,7 @@ class ClientWorker(QObject):
         if not self.running:
             return
         try:
-            print(f'[CLIENT] Sending data to {self.peer_id}', data)
             self.sock.sendall(data)
-            print(f'[CLIENT] Data sent to {self.peer_id}')
         except Exception as e:
             self.running = False
             self.status.emit(str(e))
@@ -114,8 +122,7 @@ class ClientWorker(QObject):
 
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
-        except Exception as e:
-            print('[STOP ERROR]', str(e))
+        except:
             pass
 
         self.finished.emit()
@@ -124,7 +131,7 @@ class ClientWorker(QObject):
     def _cleanup(self, retry=False):
         if self.running:
             self.running = False
-            self.disconnected.emit(self.peer_id)
+            self.disconnected.emit()
 
         try:
             self.sock.close()

@@ -1,5 +1,5 @@
-import socket
-from PyQt5.QtCore import QObject, pyqtSignal
+# import socket
+# from PyQt5.QtCore import QObject, pyqtSignal
 
 class ServerWorker(QObject):
     new_connection = pyqtSignal(object)   # socket
