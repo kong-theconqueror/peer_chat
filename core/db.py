@@ -70,3 +70,33 @@ class ChatDatabase:
 
         neighbors = [dict(row) for row in cursor.fetchall()]
         return neighbors
+
+    def upsert_neighbor(self, peer_id: str, username: str, ip: str, port: int, status: int = 1):
+        """Insert or update a neighbor by peer_id.
+        If the neighbor exists, update fields and last_seen; otherwise insert.
+        """
+        try:
+            cur = self.conn.execute("SELECT COUNT(1) FROM neighbor WHERE peer_id = ?", (peer_id,))
+            exists = cur.fetchone()[0] > 0
+
+            if exists:
+                self.conn.execute(
+                    """
+                    UPDATE neighbor
+                    SET username = ?, ip = ?, port = ?, status = ?, last_seen = CURRENT_TIMESTAMP
+                    WHERE peer_id = ?
+                    """,
+                    (username, ip, port, status, peer_id)
+                )
+            else:
+                self.conn.execute(
+                    """
+                    INSERT INTO neighbor (peer_id, username, ip, port, status)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (peer_id, username, ip, port, status)
+                )
+            self.conn.commit()
+        except Exception:
+            # Keep DB errors from crashing the app; caller can decide next steps
+            pass

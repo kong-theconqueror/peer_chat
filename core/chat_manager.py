@@ -99,11 +99,39 @@ class ChatManager(QObject):
 
     # add active peer to list
     def add_active_peer(self, peer_id):
-        for neigbor in self.neigbors:
-            if neigbor["peer_id"] == peer_id and peer_id not in self.active_peer:
-                self.active_peer.append(neigbor)
-                self.update_peers.emit(self.active_peer)
+        # Try to find neighbor in cached list
+        neighbor = None
+        for n in self.neigbors:
+            if n["peer_id"] == peer_id:
+                neighbor = n
                 break
+
+        # If not found, refresh from DB (newly discovered peer)
+        if neighbor is None:
+            try:
+                self.neigbors = self.db.get_neighbors()
+                for n in self.neigbors:
+                    if n["peer_id"] == peer_id:
+                        neighbor = n
+                        break
+            except Exception:
+                pass
+
+        # Fallback neighbor object if still missing
+        if neighbor is None:
+            neighbor = {
+                "peer_id": peer_id,
+                "username": peer_id[:8],
+                "ip": "",
+                "port": 0,
+                "status": 1,
+                "last_seen": None
+            }
+
+        # Add to active list if not already
+        if not any(p.get("peer_id") == peer_id for p in self.active_peer):
+            self.active_peer.append(neighbor)
+            self.update_peers.emit(self.active_peer)
     
     # remove active peer to list
     def remove_active_peer(self, peer_id):
@@ -225,7 +253,42 @@ class ChatManager(QObject):
             self.handle_find_nodes(msg)
 
         elif msg_type == "FIND_ACK":
-            self.log_received.emit(f"Found node: {msg['from']}")
+            content = msg.get("content", {})
+
+            peers = []
+            if isinstance(content, dict):
+                if "self" in content and isinstance(content["self"], dict):
+                    peers.append(content["self"])
+                if "neighbors" in content and isinstance(content["neighbors"], list):
+                    peers.extend([p for p in content["neighbors"] if isinstance(p, dict)])
+
+            for p in peers:
+                try:
+                    peer_id = p.get("peer_id")
+                    ip = p.get("ip")
+                    port = p.get("port")
+                    username = p.get("username", (peer_id or "")[:8])
+
+                    if not peer_id or not ip or not port:
+                        continue
+                    if peer_id == self.config.peer_id:
+                        continue
+
+                    # Save/update neighbor and connect if needed
+                    try:
+                        self.db.upsert_neighbor(peer_id, username, ip, int(port), status=1)
+                    except Exception as e:
+                        print(f"[DB_ERROR] upsert_neighbor failed: {e}")
+
+                    if peer_id not in self.clients:
+                        try:
+                            self.init_client(peer_id, ip, int(port))
+                        except Exception as e:
+                            print(f"[ERROR] Failed to init client to discovered peer {peer_id}: {e}")
+
+                    self.status.emit(f"[DISCOVER] Found peer {username}")
+                except Exception:
+                    pass
 
     def handle_forward_msg(self, msg):
         ttl = msg["ttl"] - 1
@@ -253,21 +316,45 @@ class ChatManager(QObject):
                     print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
 
     def handle_find_nodes(self, msg):
-        ttl = msg["ttl"] - 1
         sender = msg["from"]
+        ttl = msg["ttl"] - 1
+
+        # Prepare neighbors payload (only online peers with minimal fields)
+        neighbors_payload = []
+        try:
+            for n in self.neigbors:
+                if n.get("status", 0) == 1:
+                    neighbors_payload.append({
+                        "peer_id": n.get("peer_id"),
+                        "username": n.get("username"),
+                        "ip": n.get("ip"),
+                        "port": n.get("port"),
+                    })
+        except Exception:
+            pass
 
         ack = encode_message(
             sender=self.config.peer_id,
+            sender_name=self.config.username,
             receiver=sender,
-            content="ACK",
-            message_type="FIND_ACK"
+            message_type="FIND_ACK",
+            content={
+                "self": {
+                    "peer_id": self.config.peer_id,
+                    "username": self.config.username,
+                    "ip": self.config.ip,
+                    "port": self.config.port
+                },
+                "neighbors": neighbors_payload
+            }
         )
 
-        if sender in self.clients:
+        # gửi ngược về (direct hoặc broadcast để forward)
+        for peer_id, obj in list(self.clients.items()):
             try:
-                self.clients[sender]["worker"].send_data.emit(ack)
-            except Exception as e:
-                print(f"[ERROR] Failed to send ACK to {sender}: {e}")
+                obj["worker"].send_data.emit(ack)
+            except Exception:
+                pass
 
         if ttl <= 0:
             return
