@@ -73,11 +73,13 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 #### 2.2.1. Lớp UI (Giao diện người dùng)
 
 **MainWindow**:
+
 	- Chức năng: Cho phép chọn node (A-M), nhập username, khởi động ChatWindow
 	- Thành phần: Dropdown list, text field, nút "Start Chat"
 	- Luồng: Load config → Khởi tạo ChatManager → Mở ChatWindow
 
 **ChatWindow:**
+
 	- Sidebar trái:
 		- Danh sách peer (neighbor)
 		- Click để chọn peer chat
