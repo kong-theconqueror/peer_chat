@@ -73,57 +73,57 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 #### 2.2.1. Lớp UI (Giao diện người dùng)
 
 **MainWindow** - Cửa sổ khởi động:
-	+ Chức năng: Cho phép chọn node (A-M), nhập username, khởi động ChatWindow
-	+ Thành phần: Dropdown list, text field, nút "Start Chat"
-	+ Luồng: Load config → Khởi tạo ChatManager → Mở ChatWindow
+	- Chức năng: Cho phép chọn node (A-M), nhập username, khởi động ChatWindow
+	- Thành phần: Dropdown list, text field, nút "Start Chat"
+	- Luồng: Load config → Khởi tạo ChatManager → Mở ChatWindow
 
 **ChatWindow** - Cửa sổ chat chính:
-	+ Sidebar trái:
+	- Sidebar trái:
 		- Danh sách peer (neighbor)
 		- Click để chọn peer chat
-	+ Vùng chat giữa:
+	- Vùng chat giữa:
 		- Lịch sử tin nhắn (sent bên phải, received bên trái)
 		- Timestamp cho mỗi tin
 		- Tự động scroll xuống khi có tin mới
-	+ Input bar dưới:
+	- Input bar dưới:
 		- Ô nhập text (QTextEdit)
 		- Nút "Send" (QPushButton)
 		- Hỗ trợ Enter để gửi nhanh
-	+ Panel log:
+	- Panel log:
 		- Hiển thị sự kiện: connected, disconnected, message sent/received, error
-	+ Menu bar:
+	- Menu bar:
 		- Discover → Find Nodes
 		- Settings → Cấu hình
 		- Help → Hướng dẫn
 
 #### 2.2.2. Lớp Core - ChatManager
-	+ Khởi tạo server & client
-	+ Điều phối routing
-	+ Xử lý message
-	+ Giao tiếp database
+	- Khởi tạo server & client
+	- Điều phối routing
+	- Xử lý message
+	- Giao tiếp database
 	
 #### 2.2.3. Lớp Network
-	+ Mô hình kết nối:
+	- Mô hình kết nối:
 		- Mỗi kết nối = 1 thread
 		- Không block UI thread
 		- Giao tiếp qua Qt signals
-	+ Thành phần:
+	- Thành phần:
 		- ServerWorker: lắng nghe kết nối
 		- ClientWorker: kết nối chủ động
 		- ServerClientWorker: xử lý socket đến
 		
 #### 2.2.4. Lớp Database
-	+ Thiết kế phân tán:
+	- Thiết kế phân tán:
 		- SQLite riêng cho từng node
 		- Không đồng bộ DB giữa các node
-	+ Bảng chính:
+	- Bảng chính:
 		- messages
 		- neighbor
 		
 ### 2.3. Quy trình và giao thức
 
 #### 2.3.1. Quy trình gửi tin nhắn (Happy Path)
-
+```
 User A (Alice):               				Network:               	  User B (Bob):
 │
 ├─ Nhập text "Hello"
@@ -142,9 +142,11 @@ User A (Alice):               				Network:               	  User B (Bob):
 │                              				                          ├─ Lưu DB (is_sent=0)
 │                              				                          └─ Hiển thị UI "Alice: Hello"
 
+```
 #### 3.3.2. Quy trình định tuyến multi-hop
 Tình huống: A muốn gửi cho C nhưng không có đường trực tiếp, phải qua B:
 
+```
 Node A:                    				Node B:                    			Node C:
 │
 ├─ send_message(to=C, "Hi")
@@ -163,6 +165,7 @@ Node A:                    				Node B:                    			Node C:
 │                         				                           			├─ Lưu DB
 │                         				                           			└─ Hiển thị "A: Hi"
 
+```
 #### 3.3.3. Cơ chế chống vòng lặp
 
 **Vấn đề: Trong mạng P2P, tin nhắn có thể bị forward lại nhiều lần, tạo vòng lặp vô hạn.
@@ -184,7 +187,7 @@ A gửi msg (id=abc123, ttl=5)
 → A nhận lại từ C: abc123 ĐÃ CÓ → drop (không xử lý lần 2)
 
 #### 3.4. Luồng xử lý đa luồng (Threading Model)
-
+```
 main_thread (Qt Event Loop)
   │
   ├─ UI: MainWindow, ChatWindow
@@ -208,7 +211,7 @@ main_thread (Qt Event Loop)
   │
   └─ ClientWorker_2 (thread → peer C)
       └─ Loop: send/recv
-	  
+```	  
 **Quy tắc giao tiếp:**
 
 	- Giữa các thread: dùng Qt signal/slot (thread-safe)
@@ -227,7 +230,7 @@ main_thread (Qt Event Loop)
 	- **Threading:** QThread (PyQt5)	(Tích hợp signal/slot, thread-safe)
 
 #### 4.2. Cấu trúc thư mục
-
+```
 peer_chat/
 ├── config/              # Cấu hình các node
 │   ├── A.json
@@ -262,7 +265,7 @@ peer_chat/
 ├── main.py              # Điểm vào
 ├── requirements.txt     # Dependencies
 └── README.md
-
+```
 ### 5. HƯỚNG DẪN CHẠY DEMO
 #### 5.1. Chuẩn bị môi trường
 
