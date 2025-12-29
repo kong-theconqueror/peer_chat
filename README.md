@@ -179,12 +179,6 @@ Node A:                    				Node B:                    			Node C:
 		- Nếu chưa → thêm vào set, xử lý tiếp
 	4. TTL giảm mỗi lần forward:
 		- Nếu ttl == 0 → drop (không forward)
-'''
-Ví dụ:
-	A gửi msg (id=abc123, ttl=5)
-	→ B nhận: abc123 chưa có → add, xử lý, forward (ttl=4)
-	→ C nhận từ B: abc123 chưa có → add, forward (ttl=3)
-	→ A nhận lại từ C: abc123 ĐÃ CÓ → drop (không xử lý lần 2)
 
 #### 3.4. Luồng xử lý đa luồng (Threading Model)
 ```
@@ -308,7 +302,7 @@ python gen_data.py
 
 Topology mặc định:
 
-<img width="891" height="611" alt="image" src="https://github.com/user-attachments/assets/fb97d03c-7b2e-46d1-a20d-dc1f82279703" />
+<img width="600" height="450" alt="image" src="https://github.com/user-attachments/assets/fb97d03c-7b2e-46d1-a20d-dc1f82279703" />
 
 
 #### 5.3. Demo 1: Chạy một node
@@ -340,6 +334,7 @@ python main.py
 # Chọn Node B, username "Bob"
 ```
 **Kịch bản:**
+
 	1. Trong ChatWindow A:
 		- Click chọn B (Bob) từ sidebar
 		- Nhập "Hello Bob"
@@ -350,7 +345,9 @@ python main.py
 		- Log B: "✓ Received from Alice"
 
 #### 5.5. Demo 3: Định tuyến multi-hop
+
 **Khởi động 3 node:**
+
 	- Terminal 1: Node A (Alice)
 	- Terminal 2: Node B (Bridge)
 	- Terminal 3: Node C (Charlie)
@@ -360,6 +357,7 @@ python main.py
 	A ─── B ─── C (A không neighbor trực tiếp với C)
 
 **Thao tác:**
+
 	1. ChatWindow A: Menu "Discover" → "Find Nodes"
 	2. A gửi FIND_NODES → B → C
 	3. C gửi FIND_ACK → B → A
@@ -368,15 +366,16 @@ python main.py
 	6. Log B: "Forward message from A to C"
 
 #### 5.6. Demo 4: Chống vòng lặp
+
 **Kịch bản:** Tạo vòng A → B → C → A
 
 **Thao tác:**
+
 	1. A gửi tin (id=abc123, ttl=5)
 	2. B nhận → forward C (ttl=4)
 	3. C nhận → forward A (ttl=3)
 	4. A nhận lại: kiểm tra abc123 in seen_messages → DROP
 	5. Log A: "Message abc123 already processed"
-
 ​
 ## 6. KẾT LUẬN
 
