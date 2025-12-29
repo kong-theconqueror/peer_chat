@@ -72,12 +72,12 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 
 #### 2.2.1. Lớp UI (Giao diện người dùng)
 
-**MainWindow** - Cửa sổ khởi động:
+**MainWindow**:
 	- Chức năng: Cho phép chọn node (A-M), nhập username, khởi động ChatWindow
 	- Thành phần: Dropdown list, text field, nút "Start Chat"
 	- Luồng: Load config → Khởi tạo ChatManager → Mở ChatWindow
 
-**ChatWindow** - Cửa sổ chat chính:
+**ChatWindow:**
 	- Sidebar trái:
 		- Danh sách peer (neighbor)
 		- Click để chọn peer chat
@@ -168,7 +168,7 @@ Node A:                    				Node B:                    			Node C:
 ```
 #### 3.3.3. Cơ chế chống vòng lặp
 
-**Vấn đề: Trong mạng P2P, tin nhắn có thể bị forward lại nhiều lần, tạo vòng lặp vô hạn.
+**Vấn đề:** Trong mạng P2P, tin nhắn có thể bị forward lại nhiều lần, tạo vòng lặp vô hạn.
 
 **Giải pháp:**
 
@@ -179,12 +179,12 @@ Node A:                    				Node B:                    			Node C:
 		- Nếu chưa → thêm vào set, xử lý tiếp
 	4. TTL giảm mỗi lần forward:
 		- Nếu ttl == 0 → drop (không forward)
-
+'''
 Ví dụ:
-A gửi msg (id=abc123, ttl=5)
-→ B nhận: abc123 chưa có → add, xử lý, forward (ttl=4)
-→ C nhận từ B: abc123 chưa có → add, forward (ttl=3)
-→ A nhận lại từ C: abc123 ĐÃ CÓ → drop (không xử lý lần 2)
+	A gửi msg (id=abc123, ttl=5)
+	→ B nhận: abc123 chưa có → add, xử lý, forward (ttl=4)
+	→ C nhận từ B: abc123 chưa có → add, forward (ttl=3)
+	→ A nhận lại từ C: abc123 ĐÃ CÓ → drop (không xử lý lần 2)
 
 #### 3.4. Luồng xử lý đa luồng (Threading Model)
 ```
@@ -223,10 +223,10 @@ main_thread (Qt Event Loop)
 
 #### 4.1. Công nghệ và thư viện
 
-	- **Ngôn ngữ:**	Python 3.8+	(Dễ học, thư viện phong phú)
+	- **Ngôn ngữ:**	 Python 3.8+	(Dễ học, thư viện phong phú)
 	- **Giao diện:** PyQt5	(Cross-platform, event-driven tốt)
-	- **Database:**	SQLite	(Nhẹ, không cần server riêng)
-	- **Mã hóa:** cryptography	(API đơn giản, hỗ trợ AES-256)
+	- **Database:**	 SQLite	(Nhẹ, không cần server riêng)
+	- **Mã hóa:**    cryptography	(API đơn giản, hỗ trợ AES-256)
 	- **Threading:** QThread (PyQt5)	(Tích hợp signal/slot, thread-safe)
 
 #### 4.2. Cấu trúc thư mục
@@ -269,37 +269,40 @@ peer_chat/
 ### 5. HƯỚNG DẪN CHẠY DEMO
 #### 5.1. Chuẩn bị môi trường
 
-**Bước 1: Cài đặt Python
+**Bước 1: Cài đặt Python**
 
 bash
-# Kiểm tra phiên bản
+##### Kiểm tra phiên bản
 python --version
-# Yêu cầu: Python 3.8+
+###### Yêu cầu: Python 3.8+
 
-**Bước 2: Tạo môi trường ảo
-
+**Bước 2: Tạo môi trường ảo**
+```
 bash
 cd peer_chat
 python -m venv .venv
-
-# Windows
+```
+###### Windows
+```
 .venv\Scripts\activate
-
-# macOS/Linux
+```
+###### macOS/Linux
+```
 source .venv/bin/activate
-
-**Bước 3: Cài đặt hàm
-
+```
+**Bước 3: Cài đặt hàm**
+```
 bash
 pip install --upgrade pip
 pip install -r requirements.txt
-
+```
 
 #### 5.2. Sinh dữ liệu mẫu
+```
 bash
 python gen_data.py
-
-**Kết quả:
+```
+**Kết quả:**
 	- Tạo 13 file config: config/A.json ... config/M.json
 	- Tạo 13 database: db/A.db ... db/M.db
 
@@ -309,10 +312,12 @@ Topology mặc định:
 
 
 #### 5.3. Demo 1: Chạy một node
+```
 bash
 python main.py
+```
 
-**Thao tác:
+**Thao tác:**
 
 	1. Chọn Node A từ dropdown
 	2. Nhập username: Alice
@@ -322,40 +327,39 @@ python main.py
 		- Log: "Peer initialized. Connecting..."
 
 #### 5.4. Demo 2: Chat giữa 2 node
-**Terminal 1:
+**Terminal 1:**
+```
 bash
 python main.py
-
 # Chọn Node A, username "Alice"
-**Terminal 2:
+```
+**Terminal 2:**
+```
 bash
 python main.py
-
 # Chọn Node B, username "Bob"
-**Kịch bản:
-
+```
+**Kịch bản:**
 	1. Trong ChatWindow A:
 		- Click chọn B (Bob) từ sidebar
 		- Nhập "Hello Bob"
 		- Nhấn Send
-
 	2. Kết quả:
 		- Log A: "✓ Sent: Hello Bob to B"
 		- ChatWindow B: Hiển thị "Alice: Hello Bob"
 		- Log B: "✓ Received from Alice"
 
-
 #### 5.5. Demo 3: Định tuyến multi-hop
-**Khởi động 3 node:
+**Khởi động 3 node:**
 	- Terminal 1: Node A (Alice)
 	- Terminal 2: Node B (Bridge)
 	- Terminal 3: Node C (Charlie)
 
-**Topology:
+**Topology:**
 
 	A ─── B ─── C (A không neighbor trực tiếp với C)
 
-**Thao tác:
+**Thao tác:**
 	1. ChatWindow A: Menu "Discover" → "Find Nodes"
 	2. A gửi FIND_NODES → B → C
 	3. C gửi FIND_ACK → B → A
@@ -366,7 +370,7 @@ python main.py
 #### 5.6. Demo 4: Chống vòng lặp
 **Kịch bản:** Tạo vòng A → B → C → A
 
-**Thao tác:
+**Thao tác:**
 	1. A gửi tin (id=abc123, ttl=5)
 	2. B nhận → forward C (ttl=4)
 	3. C nhận → forward A (ttl=3)
