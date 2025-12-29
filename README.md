@@ -1,5 +1,5 @@
 python -m virtualenv .env
 
-.env\Scripts\active
+.env\Scripts\activate
 
 pip install pyqt5

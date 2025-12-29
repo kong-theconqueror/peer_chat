@@ -10,7 +10,7 @@ class ChatDatabase:
 
     def create_tables(self):
         self.conn.execute("""
-        CREATE TABLE IF NOT EXISTS message (
+        CREATE TABLE IF NOT EXISTS messages (
             id VARCHAR(36),
             sender TEXT,
             receiver TEXT,
@@ -34,7 +34,7 @@ class ChatDatabase:
         self.conn.commit()
 
     def reset_db(self):
-        self.conn.execute("DROP TABLE IF EXISTS message")
+        self.conn.execute("DROP TABLE IF EXISTS messages")
         self.conn.execute("DROP TABLE IF EXISTS neighbor")
 
         self.create_tables()
