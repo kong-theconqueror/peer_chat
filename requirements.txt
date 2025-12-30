@@ -1,1 +1,3 @@
 pyQt5
+pytest
+cryptography

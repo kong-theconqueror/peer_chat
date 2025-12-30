@@ -2,7 +2,11 @@ import json
 import time
 from uuid import uuid4
 
-def encode_message(sender, receiver, content, forwarder="", sender_name="", receiver_name="", ttl=5, message_type="MESSAGE", message_id=str(uuid4())):
+def encode_message(sender, receiver, content, forwarder="", sender_name="", receiver_name="", ttl=5, message_type="MESSAGE", message_id=None):
+    # Ensure a new message_id is generated per call if not provided
+    if message_id is None:
+        message_id = str(uuid4())
+
     en_msg_str = json.dumps({
         "type": message_type,
         "from": sender,
