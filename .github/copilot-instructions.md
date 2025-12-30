@@ -78,14 +78,14 @@
 - **Tên file config:** `A.json`..`M.json` được load bằng `Config(f'{text}.json')` trong `ui/main_window.py`
 - **Network protocol:** Truyền raw bytes (`encode_message`/`decode_message`). Đừng thay đổi format mà không update cả hai đầu
 - **Lỗi phát hiện:**
-  - **Bug tên bảng (đã sửa):** Trước đây có vài query tham chiếu nhầm bảng `message` trong `core/db.py` (trong khi schema tạo bảng `messages`) gây lỗi SQL; đã sửa các truy vấn để dùng `messages` đồng nhất và thêm migration để đảm bảo cột `id` (UUID) tồn tại và backfill các bản ghi cũ.
-  - **Chạy migration:** để áp dụng migration cho các DB cũ, chạy `python scripts/migrate_db.py` từ thư mục gốc của dự án. **Hãy sao lưu thư mục `db/` trước khi chạy.**
-    - **Trên Windows / PowerShell (nếu dùng virtualenv):**
+  - **Bug tên bảng (đã được sửa trước đây):** Trước đây có vài query tham chiếu nhầm bảng `message` trong `core/db.py` (trong khi schema tạo bảng `messages`) gây lỗi SQL; đã sửa các truy vấn để dùng `messages` đồng nhất và thêm migration để đảm bảo cột `id` (UUID) tồn tại và backfill các bản ghi cũ.
+  - **Chạy migration (TODO script):** dự kiến sẽ có script `scripts/migrate_db.py` để áp dụng migration cho các DB cũ. Script này HIỆN CHƯA được thêm vào repository, hãy tự viết dựa trên logic trong `core/db.py` (hoặc bỏ qua bước này nếu bạn chỉ dùng DB mới tạo bằng `gen_data.py`). Khi script tồn tại, có thể chạy từ thư mục gốc của dự án. **Hãy sao lưu thư mục `db/` trước khi chạy.**
+    - **Ví dụ cách chạy dự kiến trên Windows / PowerShell (nếu dùng virtualenv):**
       ```powershell
       .env\Scripts\activate
       python scripts/migrate_db.py
       ```
-    - **Hoặc chạy trực tiếp với Python của virtualenv:**
+    - **Hoặc chạy trực tiếp với Python của virtualenv (khi script đã tồn tại):**
       ```powershell
       & ".\.env\Scripts\python.exe" scripts/migrate_db.py
       ```

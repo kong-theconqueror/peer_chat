@@ -86,6 +86,10 @@ class ChatManager(QObject):
         thread.started.connect(worker.run)
 
         worker.new_data.connect(self.handle_incoming)
+        # When server client identifies its peer id, mark it active
+        worker.peer_identified.connect(self.add_active_peer)
+        # When the server client disconnects, remove active peer (use worker.peer_id)
+        worker.disconnected.connect(lambda w=worker: self.remove_active_peer(getattr(w, 'peer_id', None)))
 
         worker.disconnected.connect(thread.quit)
         worker.disconnected.connect(worker.deleteLater)
@@ -132,14 +136,37 @@ class ChatManager(QObject):
         if not any(p.get("peer_id") == peer_id for p in self.active_peer):
             self.active_peer.append(neighbor)
             self.update_peers.emit(self.active_peer)
+
+            # Mark neighbor as online in DB
+            try:
+                self.db.upsert_neighbor(peer_id, neighbor.get("username", peer_id[:8]), neighbor.get("ip", ""), int(neighbor.get("port", 0)), status=1)
+            except Exception as e:
+                print(f"[DB_ERROR] Failed to mark neighbor online: {e}")
     
     # remove active peer to list
     def remove_active_peer(self, peer_id):
-        for peer in self.active_peer:
-            if peer["peer_id"] == peer_id:
+        if not peer_id:
+            return
+
+        for peer in list(self.active_peer):
+            if peer.get("peer_id") == peer_id:
                 self.active_peer.remove(peer)
                 self.update_peers.emit(self.active_peer)
                 break
+        # Mark neighbor as offline in DB, preserving existing username/ip/port when available
+        try:
+            neighbor = self.db.get_neighbor(peer_id)
+            if neighbor:
+                username = neighbor.get("username")
+                ip = neighbor.get("ip")
+                port = neighbor.get("port")
+            else:
+                username = peer_id[:8]
+                ip = ""
+                port = 0
+            self.db.upsert_neighbor(peer_id, username, ip, int(port or 0), status=0)
+        except Exception as e:
+            print(f"[DB_ERROR] Failed to mark neighbor offline: {e}")
 
     def remove_peer(self, peer_id):
         """Safely stop worker thread and remove peer entry."""
@@ -179,18 +206,32 @@ class ChatManager(QObject):
             self.status.emit("Peer not connected")
             return
 
+        msg_id = str(uuid4())
         packet = encode_message(
             sender=self.config.peer_id,
+            sender_name=self.config.username,
             receiver=peer_id,
             content=text,
-            message_type="MESSAGE"
+            message_type="MESSAGE",
+            message_id=msg_id
         )
+
+        try:
+            self.db.save_message(msg_id, self.config.peer_id, peer_id, text, sender_name=self.config.username, receiver_name=self.db.get_username(peer_id), is_sent=1)
+        except Exception as e:
+            print(f"[DB_ERROR] save_message failed for send_message: {e}")
 
         self.clients[peer_id]["worker"].send_data.emit(packet)
 
     def send_broadcast_message(self, text):
         """Broadcast MESSAGE to all connected peers (safe iteration)."""
         msg_id = str(uuid4())
+        # Persist the broadcast message as a single outgoing record
+        try:
+            self.db.save_message(msg_id, self.config.peer_id, "", text, sender_name=self.config.username, receiver_name="", is_sent=1)
+        except Exception as e:
+            print(f"[DB_ERROR] save_message failed for broadcast: {e}")
+
         for peer_id, obj in list(self.clients.items()):
             if obj["worker"].running is False:
                 continue
@@ -247,6 +288,15 @@ class ChatManager(QObject):
         msg_type = msg["type"]
         # Dispatch based on message type
         if msg_type == "MESSAGE":
+            try:
+                # Persist incoming message (received) with sender/receiver names when available
+                sender = msg.get("from")
+                receiver = msg.get("to", "")
+                sender_name = msg.get("from_n") or self.db.get_username(sender)
+                receiver_name = msg.get("to_n") or self.db.get_username(receiver)
+                self.db.save_message(msg_id, sender, receiver, msg.get("content", ""), sender_name=sender_name, receiver_name=receiver_name, is_sent=0)
+            except Exception as e:
+                print(f"[DB_ERROR] save_message failed: {e}")
             self.message_received.emit(msg)
 
         elif msg_type == "FIND_NODES":
@@ -391,3 +441,10 @@ class ChatManager(QObject):
             entry["worker"].stop()
             entry["thread"].quit()
             entry["thread"].wait()
+
+        # Close DB connection cleanly
+        try:
+            if hasattr(self, 'db') and self.db and getattr(self.db, 'conn', None):
+                self.db.conn.close()
+        except Exception:
+            pass
