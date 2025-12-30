@@ -234,8 +234,19 @@ class ChatWindow(QMainWindow):
 
     def on_peer_selected(self, item):
         peer = item.data(Qt.UserRole)
+        peer_id = (peer or {}).get("peer_id")
+
+        # Toggle behavior: click the same peer again to clear selection (back to broadcast)
+        if self.selected_user and self.selected_user.get("peer_id") == peer_id:
+            self.selected_user = {}
+            try:
+                self.load_initial_messages()
+            except Exception:
+                pass
+            return
+
         self.selected_user = peer
-        self.load_conversation(peer.get("peer_id"))
+        self.load_conversation(peer_id)
 
     def load_conversation(self, peer_id):
         # Load conversation between local node and peer_id

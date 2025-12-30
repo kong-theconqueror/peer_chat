@@ -4,5 +4,8 @@
     "username": "user_B",
     "peer_id": "a032ae06-a289-488e-97f4-fe4101f0d561",
     "node": "B",
-    "ttl": 5
+    "ttl": 5,
+    "encryption_enabled": false,
+    "aes_key": "",
+    "crypto_log_compare": false
 }

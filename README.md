@@ -91,7 +91,7 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 - Input bar dưới:
   - Ô nhập text (QTextEdit)
   - Nút "Send" (QPushButton)
-  - Hỗ trợ Enter để gửi nhanh
+  - Gửi bằng nút "Send" (hiện chưa bind phím Enter)
 - Panel log:
   - Hiển thị sự kiện: connected, disconnected, message sent/received, error
 - Menu bar:
@@ -291,18 +291,20 @@ python --version
 
 ```bash
 cd peer_chat
-python -m venv .venv
+python -m venv .env
 ```
 
 **Windows:**
 ```bash
-.venv\Scripts\activate
+.env\Scripts\activate
 ```
 
 **macOS/Linux:**
 ```bash
-source .venv/bin/activate
+source .env/bin/activate
 ```
+
+Ghi chú: nếu bạn đã dùng thư mục `.venv` trước đó thì chỉ cần thay `.env` → `.venv` trong các lệnh activate/run.
 
 #### 4.1.3. Cài đặt hàm
 
@@ -358,12 +360,18 @@ python main.py
    - Click chọn B (Bob) từ sidebar
    - Nhập "Hello Bob"
    - Nhấn Send
+  - Muốn quay lại broadcast: click lại đúng peer đang chọn để bỏ chọn
 2. Kết quả:
    - Log A: "✓ Sent: Hello Bob to B"
    - ChatWindow B: Hiển thị "Alice: Hello Bob"
    - Log B: "✓ Received from Alice"
 
 ### 4.5. Demo 3: Định tuyến multi-hop
+
+Lưu ý quan trọng (khớp code hiện tại):
+- `send_message()` chỉ gửi 1-to-1 tới peer đang **kết nối trực tiếp** (có ClientWorker).
+- Cơ chế multi-hop trong code là kiểu **forward/flood** giữa các kết nối hiện có (dựa trên TTL + seen_messages).
+- Muốn A nói chuyện với C thường cần `Discover → Find Nodes` để A biết endpoint và tạo kết nối, hoặc dùng broadcast.
 
 **Khởi động 3 node:**
 - Terminal 1: Node A (Alice)
@@ -471,7 +479,35 @@ python main.py
 	5. A gửi "Hi Charlie" → B forward → C nhận
 	6. Log B: "Forward message from A to C"
 
-#### 5.6. Demo 4: Chống vòng lặp
+#### 5.6. Demo 4: Mã hóa tin: AES-256 encrypt payload
+
+**Kịch bản:** Gửi tin nhắn A (mã hóa) → B (không mã hóa) → C (mã hóa)
+
+			BẬT mã hóa + bật log so sánh (CMD)
+			```
+			set PEERCHAT_ENCRYPTION=1
+			set PEERCHAT_AES_KEY=qdRIHAtx/2z5tHkHZs8nn0cpHQKe4ye/oaqr0k2jDTw=
+			set PEERCHAT_CRYPTO_LOG_COMPARE=1
+			.env\Scripts\python.exe main.py
+			```
+			
+			TẮT mã hóa (CMD)
+			```			
+			set PEERCHAT_ENCRYPTION=0
+			set PEERCHAT_AES_KEY=
+			set PEERCHAT_CRYPTO_LOG_COMPARE=
+			.env\Scripts\python.exe main.py
+			```
+			
+**Thao tác:**
+
+	1. Bật mã hóa trên A
+	2. Bật mã hóa trên C
+	3. Gửi tin nhắn A → B → C
+	4. C nhận lại tin nhắn clear text
+	5. B nhận lại tin nhắn đã mã hóa
+
+#### 5.7. Demo 5: Chống vòng lặp
 
 **Kịch bản:** Tạo vòng A → B → C → A
 

@@ -5,6 +5,8 @@ from network.server_worker import ServerWorker
 from network.server_client_worker import ServerClientWorker
 from network.protocol import encode_message, decode_message
 from core.db import ChatDatabase
+from crypto.encrypt import derive_aes256_key, encrypt_text, decrypt_text
+import os
 
 class ChatManager(QObject):
     message_received = pyqtSignal(dict)
@@ -23,6 +25,52 @@ class ChatManager(QObject):
         self.neigbors = self.db.get_neighbors()
         self.active_peer = []
 
+        # --- Crypto runtime flags ---
+        # Allow env overrides for quick A/B testing without changing JSON config.
+        self._crypto_enabled = self._read_bool_env("PEERCHAT_ENCRYPTION", getattr(self.config, "encryption_enabled", False))
+        self._crypto_log_compare = self._read_bool_env("PEERCHAT_CRYPTO_LOG_COMPARE", getattr(self.config, "crypto_log_compare", False))
+        env_key = os.getenv("PEERCHAT_AES_KEY", "").strip()
+        cfg_key = getattr(self.config, "aes_key", "")
+        self._crypto_key = derive_aes256_key(env_key or cfg_key)
+
+        if self._crypto_enabled and not self._crypto_key:
+            print("[CRYPTO] Encryption enabled but no key provided (set PEERCHAT_AES_KEY or config aes_key). Falling back to plaintext.")
+            self._crypto_enabled = False
+
+    @staticmethod
+    def _read_bool_env(name: str, default: bool = False) -> bool:
+        v = os.getenv(name)
+        if v is None:
+            return bool(default)
+        v = str(v).strip().lower()
+        return v in {"1", "true", "yes", "y", "on"}
+
+    def _maybe_encrypt_for_wire(self, plaintext: str) -> str:
+        if not self._crypto_enabled or not self._crypto_key:
+            return plaintext
+
+        ciphertext = encrypt_text(plaintext, self._crypto_key)
+        if self._crypto_log_compare:
+            print(f"[CRYPTO][SEND] plain={plaintext!r}")
+            print(f"[CRYPTO][SEND] cipher={ciphertext!r}")
+        else:
+            print(f"[CRYPTO][SEND] cipher={ciphertext!r}")
+        return ciphertext
+
+    def _maybe_decrypt_for_ui(self, wire_payload: str) -> str:
+        if not self._crypto_enabled or not self._crypto_key:
+            return wire_payload
+
+        try:
+            plaintext = decrypt_text(wire_payload, self._crypto_key)
+            if self._crypto_log_compare and plaintext != wire_payload:
+                print(f"[CRYPTO][RECV] cipher={wire_payload!r}")
+                print(f"[CRYPTO][RECV] plain={plaintext!r}")
+            return plaintext
+        except Exception as e:
+            print(f"[CRYPTO][RECV] Decrypt failed: {e}")
+            return wire_payload
+
     def init_server(self):
         self.server_thread = QThread()
         self.server_worker = ServerWorker()
@@ -40,6 +88,18 @@ class ChatManager(QObject):
         self.server_thread.finished.connect(self.server_thread.deleteLater)
     
     def init_client(self, peer_id, host, port):
+        # Guard against invalid endpoints (common cause of WinError 10049 on Windows)
+        try:
+            port = int(port)
+        except Exception:
+            port = 0
+
+        if not host or str(host).strip() in {"0.0.0.0", "*"} or port <= 0:
+            self.status.emit(f"[CLIENT_SKIP] Invalid endpoint for {peer_id}: {host}:{port}")
+            return
+
+        host = str(host).strip()
+
         print('[LOG] Creat client threat:', peer_id, host, port)
         self.status.emit(f"Create client: {peer_id} {host}:{port}")
 
@@ -75,7 +135,7 @@ class ChatManager(QObject):
 
         for neigbor in self.neigbors:
             peer_id = neigbor["peer_id"]
-            self.init_client(peer_id, neigbor["ip"], neigbor["port"])
+            self.init_client(peer_id, neigbor.get("ip"), neigbor.get("port"))
 
     # Handle new client connection to server
     def _on_new_connection(self, conn):
@@ -139,7 +199,11 @@ class ChatManager(QObject):
 
             # Mark neighbor as online in DB
             try:
-                self.db.upsert_neighbor(peer_id, neighbor.get("username", peer_id[:8]), neighbor.get("ip", ""), int(neighbor.get("port", 0)), status=1)
+                ip = (neighbor.get("ip") or "").strip()
+                port = int(neighbor.get("port") or 0)
+                # Only persist if we actually know a connectable endpoint; otherwise avoid polluting DB.
+                if ip and ip != "0.0.0.0" and port > 0:
+                    self.db.upsert_neighbor(peer_id, neighbor.get("username", peer_id[:8]), ip, port, status=1)
             except Exception as e:
                 print(f"[DB_ERROR] Failed to mark neighbor online: {e}")
     
@@ -160,11 +224,7 @@ class ChatManager(QObject):
                 username = neighbor.get("username")
                 ip = neighbor.get("ip")
                 port = neighbor.get("port")
-            else:
-                username = peer_id[:8]
-                ip = ""
-                port = 0
-            self.db.upsert_neighbor(peer_id, username, ip, int(port or 0), status=0)
+                self.db.upsert_neighbor(peer_id, username, ip, int(port or 0), status=0)
         except Exception as e:
             print(f"[DB_ERROR] Failed to mark neighbor offline: {e}")
 
@@ -207,11 +267,12 @@ class ChatManager(QObject):
             return
 
         msg_id = str(uuid4())
+        wire_content = self._maybe_encrypt_for_wire(text)
         packet = encode_message(
             sender=self.config.peer_id,
             sender_name=self.config.username,
             receiver=peer_id,
-            content=text,
+            content=wire_content,
             message_type="MESSAGE",
             message_id=msg_id
         )
@@ -236,11 +297,12 @@ class ChatManager(QObject):
             if obj["worker"].running is False:
                 continue
             try:
+                wire_content = self._maybe_encrypt_for_wire(text)
                 packet = encode_message(
                     sender=self.config.peer_id,
                     sender_name= self.config.username,
                     receiver="",
-                    content=text,
+                    content=wire_content,
                     message_type="MESSAGE",
                     message_id=msg_id
                 )
@@ -288,16 +350,28 @@ class ChatManager(QObject):
         msg_type = msg["type"]
         # Dispatch based on message type
         if msg_type == "MESSAGE":
+            # 1-to-1 messages should only be shown/stored by the intended receiver.
+            # Broadcast messages use empty receiver ("") and are shown by everyone.
+            receiver = msg.get("to", "")
+            if receiver and receiver not in {"*"} and receiver != self.config.peer_id:
+                return
+
             try:
+                # Decrypt only for local persistence/UI AFTER forwarding.
+                wire_content = msg.get("content", "")
+                plain_content = self._maybe_decrypt_for_ui(wire_content)
+
                 # Persist incoming message (received) with sender/receiver names when available
                 sender = msg.get("from")
-                receiver = msg.get("to", "")
                 sender_name = msg.get("from_n") or self.db.get_username(sender)
                 receiver_name = msg.get("to_n") or self.db.get_username(receiver)
-                self.db.save_message(msg_id, sender, receiver, msg.get("content", ""), sender_name=sender_name, receiver_name=receiver_name, is_sent=0)
+                self.db.save_message(msg_id, sender, receiver, plain_content, sender_name=sender_name, receiver_name=receiver_name, is_sent=0)
             except Exception as e:
                 print(f"[DB_ERROR] save_message failed: {e}")
-            self.message_received.emit(msg)
+
+            msg_out = dict(msg)
+            msg_out["content"] = plain_content
+            self.message_received.emit(msg_out)
 
         elif msg_type == "FIND_NODES":
             self.handle_find_nodes(msg)
@@ -342,6 +416,8 @@ class ChatManager(QObject):
 
     def handle_forward_msg(self, msg):
         ttl = msg["ttl"] - 1
+        if ttl <= 0:
+            return
         sender = msg["from"]
         forwarder = msg["forward"]
         msg["forward"] = self.config.peer_id
