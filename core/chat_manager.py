@@ -12,6 +12,7 @@ class ChatManager(QObject):
     message_received = pyqtSignal(dict)
     log_received = pyqtSignal(str)
     update_peers = pyqtSignal(list)
+    update_discovered_peers = pyqtSignal(list)  # New signal for discovered peers
     status = pyqtSignal(str)
 
     def __init__(self, config):
@@ -379,40 +380,35 @@ class ChatManager(QObject):
         elif msg_type == "FIND_ACK":
             content = msg.get("content", {})
 
-            peers = []
-            if isinstance(content, dict):
-                if "self" in content and isinstance(content["self"], dict):
-                    peers.append(content["self"])
-                if "neighbors" in content and isinstance(content["neighbors"], list):
-                    peers.extend([p for p in content["neighbors"] if isinstance(p, dict)])
-
-            for p in peers:
+            # Only add the sender ('self') of each FIND_ACK to the discovered list, not their neighbors
+            discovered_peers = []
+            if isinstance(content, dict) and "self" in content and isinstance(content["self"], dict):
+                p = content["self"]
                 try:
                     peer_id = p.get("peer_id")
                     ip = p.get("ip")
                     port = p.get("port")
                     username = p.get("username", (peer_id or "")[:8])
+                    status = p.get("status", 1)  # Default to 1 if not present (for backward compat)
 
                     if not peer_id or not ip or not port:
-                        continue
-                    if peer_id == self.config.peer_id:
-                        continue
-
-                    # Save/update neighbor and connect if needed
-                    try:
-                        self.db.upsert_neighbor(peer_id, username, ip, int(port), status=1)
-                    except Exception as e:
-                        print(f"[DB_ERROR] upsert_neighbor failed: {e}")
-
-                    if peer_id not in self.clients:
-                        try:
-                            self.init_client(peer_id, ip, int(port))
-                        except Exception as e:
-                            print(f"[ERROR] Failed to init client to discovered peer {peer_id}: {e}")
-
-                    self.status.emit(f"[DISCOVER] Found peer {username}")
+                        pass
+                    elif peer_id == self.config.peer_id:
+                        pass
+                    elif status != 1:
+                        pass
+                    else:
+                        discovered_peers.append({
+                            "peer_id": peer_id,
+                            "username": username,
+                            "ip": ip,
+                            "port": port
+                        })
+                        self.status.emit(f"[DISCOVER] Found peer {username} ({ip}:{port})")
                 except Exception:
                     pass
+            if discovered_peers:
+                self.update_discovered_peers.emit(discovered_peers)
 
     def handle_forward_msg(self, msg):
         ttl = msg["ttl"] - 1

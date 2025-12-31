@@ -26,8 +26,33 @@ class ChatWindow(QMainWindow):
         self.chat_manager.log_received.connect(self.log_handle)
         self.chat_manager.status.connect(self.status_hanndle)
         self.chat_manager.update_peers.connect(self.update_peer_list)
+        self.chat_manager.update_discovered_peers.connect(self.update_discovered_list)
         # UI interactions
         self.node_list.itemClicked.connect(self.on_peer_selected)
+    def update_discovered_list(self, peers):
+        # Remove old discovered peers (with [Discovered] prefix)
+        for i in reversed(range(self.node_list.count())):
+            item = self.node_list.item(i)
+            if item.text().startswith('[Discovered]'):
+                self.node_list.takeItem(i)
+        # Get current peer_ids in the node_list (direct neighbors)
+        current_peer_ids = set()
+        for i in range(self.node_list.count()):
+            item = self.node_list.item(i)
+            peer = item.data(Qt.UserRole)
+            if peer and peer.get("peer_id"):
+                current_peer_ids.add(peer["peer_id"])
+        # Add new discovered peers, skip self and already connected
+        my_peer_id = self.chat_manager.config.peer_id
+        added_peer_ids = set()
+        for peer in peers:
+            peer_id = peer.get("peer_id")
+            if not peer_id or peer_id == my_peer_id or peer_id in current_peer_ids or peer_id in added_peer_ids:
+                continue
+            item = QListWidgetItem(f'[Discovered] {peer["username"]}')
+            item.setData(Qt.UserRole, peer)
+            self.node_list.addItem(item)
+            added_peer_ids.add(peer_id)
 
         # Load recent broadcasts into the chat view (persisted messages)
         try:

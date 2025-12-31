@@ -44,9 +44,9 @@ for node in nodes:
 
 def insert_neighbor(conn, peer_id, username, ip, port, status=1):
     conn.execute("""
-    INSERT INTO neighbor (peer_id, username, ip, port, status)
-    VALUES (?, ?, ?, ?, ?)
-    """, (peer_id, username, ip, port, status))
+    INSERT INTO neighbor (peer_id, username, ip, port, status, is_neighbor)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, (peer_id, username, ip, port, status, status))
     conn.commit()
 
 # generate db file

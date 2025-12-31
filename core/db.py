@@ -36,7 +36,8 @@ class ChatDatabase:
             ip TEXT NOT NULL,
             port INTEGER NOT NULL,
             last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            status INTEGER DEFAULT 1           -- 1=online, 0=offline
+            status INTEGER DEFAULT 1,          -- 1=online, 0=offline
+            is_neighbor INTEGER DEFAULT 1      -- 1=neighbor, 0=not neighbor
         )
         """)
 
