@@ -193,10 +193,10 @@ class ChatManager(QObject):
             }
 
         # Add to active list if not already
-        if not any(p.get("peer_id") == peer_id for p in self.active_peer):
+        is_new_peer = not any(p.get("peer_id") == peer_id for p in self.active_peer)
+        if is_new_peer:
             self.active_peer.append(neighbor)
-            self.update_peers.emit(self.active_peer)
-
+            
             # Mark neighbor as online in DB
             try:
                 ip = (neighbor.get("ip") or "").strip()
@@ -206,6 +206,9 @@ class ChatManager(QObject):
                     self.db.upsert_neighbor(peer_id, neighbor.get("username", peer_id[:8]), ip, port, status=1)
             except Exception as e:
                 print(f"[DB_ERROR] Failed to mark neighbor online: {e}")
+            
+            # Only emit signal when peer is actually new
+            self.update_peers.emit(self.active_peer)
     
     # remove active peer to list
     def remove_active_peer(self, peer_id):
@@ -437,9 +440,10 @@ class ChatManager(QObject):
         for peer_id, obj in list(self.clients.items()):
             if peer_id != forwarder and peer_id != sender:
                 try:
-                    obj["worker"].send_data.emit(forward_msg)
+                    if obj["worker"].running:  # Only forward if client is connected
+                        obj["worker"].send_data.emit(forward_msg)
                 except Exception as e:
-                    print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
+                    print(f"[ERROR] Failed to forward message to {peer_id}: {e}")
 
     def handle_find_nodes(self, msg):
         sender = msg["from"]
@@ -475,12 +479,14 @@ class ChatManager(QObject):
             }
         )
 
-        # gửi ngược về (direct hoặc broadcast để forward)
-        for peer_id, obj in list(self.clients.items()):
+        # Send FIND_ACK only to the sender (direct reply), not broadcast to all peers
+        if sender in self.clients:
             try:
-                obj["worker"].send_data.emit(ack)
-            except Exception:
-                pass
+                obj = self.clients[sender]
+                if obj["worker"].running:  # Only send if client is actually connected
+                    obj["worker"].send_data.emit(ack)
+            except Exception as e:
+                print(f"[ERROR] Failed to send FIND_ACK to {sender}: {e}")
 
         if ttl <= 0:
             return
@@ -498,9 +504,11 @@ class ChatManager(QObject):
         for peer_id, obj in list(self.clients.items()):
             if peer_id != sender:
                 try:
-                    obj["worker"].send_data.emit(forward)
+                    if obj["worker"].running:  # Only forward if client is connected
+                        obj["worker"].send_data.emit(forward)
                 except Exception as e:
                     print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
+
 
     def stop(self):
         if self.server_worker:

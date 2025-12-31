@@ -1,10 +1,12 @@
 import socket
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from network.protocol import MessageBuffer
+import json
 
 class ClientWorker(QObject):
     connected = pyqtSignal(str)
     disconnected = pyqtSignal(str)
-    new_data = pyqtSignal(bytes)
+    new_data = pyqtSignal(bytes)  # Emit bytes for backward compat, but now handles one message at a time
     send_data = pyqtSignal(bytes)
     status = pyqtSignal(str)
     finished = pyqtSignal()
@@ -22,6 +24,8 @@ class ClientWorker(QObject):
 
         self.running = False        # is running worker
         self._stopped = False       # is stop retry connect
+        
+        self.msg_buffer = MessageBuffer()  # Buffer for handling multiple messages per recv()
 
         self.send_data.connect(self._send)
 
@@ -29,9 +33,6 @@ class ClientWorker(QObject):
         if self._stopped or not self.retry_enabled:
             return
 
-        # self.status.emit(
-        #     f"[CLIENT] Retry connect to {self.host}:{self.port} after 5s"
-        # )
         print(f"[CLIENT] Retry connect to {self.host}:{self.port} after 5s")
 
         QTimer.singleShot(self.retry_interval, self.connect_to_peer)
@@ -40,9 +41,7 @@ class ClientWorker(QObject):
     def connect_to_peer(self):
         if self.running or self._stopped:
             return
-        # self.status.emit("[CLIENT] Connecting peer...")
 
-        # print("[CLIENT] Connecting peer...")
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(self.timeout)
@@ -52,11 +51,12 @@ class ClientWorker(QObject):
             self.running = True
             self.status.emit(f"[CLIENT] Connected to {self.host}:{self.port}")
             self.connected.emit(self.peer_id)
+            
+            self.msg_buffer = MessageBuffer()  # Reset buffer for new connection
 
             self.listen()   # blocking recv loop
 
         except (socket.timeout, ConnectionRefusedError) as e:
-            # self.status.emit(f"[CLIENT_ERROR] {str(e)}")
             self._cleanup(retry=True)
 
         except Exception as e:
@@ -76,7 +76,17 @@ class ClientWorker(QObject):
                 data = self.sock.recv(4096)
                 if not data:
                     break
-                self.new_data.emit(data)
+                
+                # Add to buffer and extract all complete messages
+                self.msg_buffer.add_data(data)
+                messages = self.msg_buffer.get_all_messages()
+                
+                # Emit each message as raw JSON bytes (for ChatManager to decode)
+                # Note: These are pure JSON without length-prefix since they were already
+                # extracted from the length-prefixed stream
+                for msg in messages:
+                    msg_bytes = json.dumps(msg).encode("utf-8")
+                    self.new_data.emit(msg_bytes)
 
         except Exception as e:
             self.status.emit(str(e))
@@ -97,9 +107,8 @@ class ClientWorker(QObject):
         if not self.running:
             return
         try:
-            print(f'[CLIENT] Sending data to {self.peer_id}', data)
+            print(f'[CLIENT] Sending data to {self.peer_id}')
             self.sock.sendall(data)
-            print(f'[CLIENT] Data sent to {self.peer_id}')
         except Exception as e:
             self.running = False
             self.status.emit(str(e))

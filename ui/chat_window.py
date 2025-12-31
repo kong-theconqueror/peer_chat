@@ -285,8 +285,22 @@ class ChatWindow(QMainWindow):
         self.log_view.append(log)
     
     def update_peer_list(self, peers):
-        self.node_list.clear()
+        # Remove duplicates before displaying (safety check)
+        seen = set()
+        unique_peers = []
         for peer in peers:
+            peer_id = peer.get("peer_id")
+            if peer_id not in seen:
+                seen.add(peer_id)
+                unique_peers.append(peer)
+        
+        # If duplicates were found, log and rebuild list in ChatManager
+        if len(unique_peers) != len(peers):
+            print(f"[UI] Detected {len(peers) - len(unique_peers)} duplicate peers, cleaning up...")
+            self.chat_manager.active_peer = unique_peers
+        
+        self.node_list.clear()
+        for peer in unique_peers:
             item = QListWidgetItem(f'{peer["username"]}')
             item.setData(Qt.UserRole, peer)
             self.node_list.addItem(item)

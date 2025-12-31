@@ -1,6 +1,7 @@
 import socket
+import json
 from PyQt5.QtCore import QObject, pyqtSignal
-from network.protocol import decode_message
+from network.protocol import decode_message, MessageBuffer
 
 class ServerClientWorker(QObject):
     new_data = pyqtSignal(bytes)
@@ -12,6 +13,7 @@ class ServerClientWorker(QObject):
         self.conn = conn
         self.running = False
         self.peer_id = None
+        self.msg_buffer = MessageBuffer()  # Buffer for handling multiple messages per recv()
 
     def run(self):
         print('[S_CLIENT] Running')
@@ -22,19 +24,26 @@ class ServerClientWorker(QObject):
                 data = self.conn.recv(4096)
                 if not data:
                     break
-                # Try to decode and identify peer id from protocol message
-                try:
-                    msg = decode_message(data)
-                    pid = msg.get('from')
-                    if pid and not self.peer_id:
-                        self.peer_id = pid
-                        self.peer_identified.emit(pid)
-                except Exception:
-                    pass
-                self.new_data.emit(data)
+                
+                # Add to buffer and extract all complete messages
+                self.msg_buffer.add_data(data)
+                messages = self.msg_buffer.get_all_messages()
+                
+                for msg in messages:
+                    # Try to decode and identify peer id from protocol message
+                    try:
+                        pid = msg.get('from')
+                        if pid and not self.peer_id:
+                            self.peer_id = pid
+                            self.peer_identified.emit(pid)
+                    except Exception:
+                        pass
+                    
+                    # Re-encode message as JSON bytes for backward compat
+                    msg_bytes = json.dumps(msg).encode("utf-8")
+                    self.new_data.emit(msg_bytes)
         except Exception as e:
             print("[S_CLIENT_ERROR]", str(e))
-            pass
         finally:
             self.cleanup()
 

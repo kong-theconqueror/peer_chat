@@ -2,10 +2,7 @@
     "ip": "127.0.0.1",
     "port": 8088,
     "username": "user_I",
-    "peer_id": "0c7fd6c1-e73c-4c15-b1d7-647012c99fe4",
+    "peer_id": "a154ecda-3882-403d-ba07-356a816c1a1e",
     "node": "I",
-    "ttl": 5,
-    "encryption_enabled": false,
-    "aes_key": "",
-    "crypto_log_compare": false
+    "ttl": 5
 }
