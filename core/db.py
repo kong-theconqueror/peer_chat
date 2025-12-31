@@ -129,6 +129,7 @@ class ChatDatabase:
         cursor.execute("""
             SELECT peer_id, username, ip, port, last_seen, status
             FROM neighbor
+            WHERE is_neighbor = 1
             ORDER BY status DESC, last_seen DESC
         """)
 

@@ -5,7 +5,7 @@ from network.protocol import decode_message
 class ServerClientWorker(QObject):
     new_data = pyqtSignal(bytes)
     disconnected = pyqtSignal()
-    peer_identified = pyqtSignal(str)
+    peer_identified = pyqtSignal(dict)
 
     def __init__(self, conn: socket.socket):
         super().__init__()
@@ -25,10 +25,17 @@ class ServerClientWorker(QObject):
                 # Try to decode and identify peer id from protocol message
                 try:
                     msg = decode_message(data)
-                    pid = msg.get('from')
-                    if pid and not self.peer_id:
-                        self.peer_id = pid
-                        self.peer_identified.emit(pid)
+                    peer_id = msg.get('from')
+                    if peer_id and not self.peer_id:
+                        self.peer_id = peer_id
+                        self.peer_identified.emit({
+                            "peer_id": peer_id,
+                            "username": msg.get('from_n') or peer_id,
+                            "ip": "",
+                            "port": 0,
+                            "status": 1,
+                            "last_seen": None
+                        })
                 except Exception:
                     pass
                 self.new_data.emit(data)

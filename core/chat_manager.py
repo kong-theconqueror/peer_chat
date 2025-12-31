@@ -148,7 +148,7 @@ class ChatManager(QObject):
 
         worker.new_data.connect(self.handle_incoming)
         # When server client identifies its peer id, mark it active
-        worker.peer_identified.connect(self.add_active_peer)
+        worker.peer_identified.connect(self.add_new_active_peer)
         # When the server client disconnects, remove active peer (use worker.peer_id)
         worker.disconnected.connect(lambda w=worker: self.remove_active_peer(getattr(w, 'peer_id', None)))
 
@@ -208,6 +208,13 @@ class ChatManager(QObject):
             except Exception as e:
                 print(f"[DB_ERROR] Failed to mark neighbor online: {e}")
     
+    def add_new_active_peer(self, peer):
+        # Add to active list if not already
+        peer_id = peer.get("peer_id")
+        if not any(p.get("peer_id") == peer_id for p in self.active_peer):
+            self.active_peer.append(peer)
+            self.update_peers.emit(self.active_peer)
+
     # remove active peer to list
     def remove_active_peer(self, peer_id):
         if not peer_id:
@@ -301,8 +308,8 @@ class ChatManager(QObject):
                 wire_content = self._maybe_encrypt_for_wire(text)
                 packet = encode_message(
                     sender=self.config.peer_id,
-                    sender_name= self.config.username,
-                    receiver="",
+                    sender_name=self.config.username,
+                    receiver="*",
                     content=wire_content,
                     message_type="MESSAGE",
                     message_id=msg_id
@@ -323,6 +330,7 @@ class ChatManager(QObject):
             try:
                 packet = encode_message(
                     sender=self.config.peer_id,
+                    sender_name=self.config.username,
                     receiver=peer_id,
                     content="",
                     message_type="FIND_NODES"
@@ -350,6 +358,9 @@ class ChatManager(QObject):
 
         msg_type = msg["type"]
         # Dispatch based on message type
+        # =====================================================
+        #               INCOMING MESSAGE HANDLING
+        # ===================================================== 
         if msg_type == "MESSAGE":
             # 1-to-1 messages should only be shown/stored by the intended receiver.
             # Broadcast messages use empty receiver ("") and are shown by everyone.
@@ -372,14 +383,20 @@ class ChatManager(QObject):
 
             msg_out = dict(msg)
             msg_out["content"] = plain_content
+            print(f'[LOG] Delivered message to UI: {msg_out}')
             self.message_received.emit(msg_out)
 
+        # =====================================================
+        #               INCOMING FIND_NODES HANDLING
+        # =====================================================
         elif msg_type == "FIND_NODES":
             self.handle_find_nodes(msg)
 
+        # =====================================================
+        #               INCOMING FIND_ACK HANDLING
+        # =====================================================
         elif msg_type == "FIND_ACK":
             content = msg.get("content", {})
-
             # Only add the sender ('self') of each FIND_ACK to the discovered list, not their neighbors
             discovered_peers = []
             if isinstance(content, dict) and "self" in content and isinstance(content["self"], dict):
@@ -483,6 +500,7 @@ class ChatManager(QObject):
 
         forward = encode_message(
             sender=msg["from"],
+            sender_name=msg["from_n"],
             receiver="*",
             forwarder=self.config.peer_id,
             content=msg["content"],
@@ -492,7 +510,7 @@ class ChatManager(QObject):
         )
 
         for peer_id, obj in list(self.clients.items()):
-            if peer_id != sender:
+            if peer_id != sender and peer_id != msg.get("forward"):
                 try:
                     obj["worker"].send_data.emit(forward)
                 except Exception as e:
