@@ -22,7 +22,7 @@ class ChatManager(QObject):
         self.seen_messages = set()   # chống loop
 
         self.db = ChatDatabase(f'{self.config.node}.db')
-        self.neigbors = self.db.get_neighbors()
+        self.neighbors = self.db.get_neighbors()
         self.active_peer = []
 
         # --- Crypto runtime flags ---
@@ -133,9 +133,9 @@ class ChatManager(QObject):
         self.init_server()
         self.server_thread.start()
 
-        for neigbor in self.neigbors:
-            peer_id = neigbor["peer_id"]
-            self.init_client(peer_id, neigbor.get("ip"), neigbor.get("port"))
+        for neighbor in self.neighbors:
+            peer_id = neighbor["peer_id"]
+            self.init_client(peer_id, neighbor.get("ip"), neighbor.get("port"))
 
     # Handle new client connection to server
     def _on_new_connection(self, conn):
@@ -163,38 +163,47 @@ class ChatManager(QObject):
 
     # add active peer to list
     def add_active_peer(self, peer_id):
+        print(f"[ADD_ACTIVE_PEER] Attempting to add peer: {peer_id[:8]}...")
+        
         # Try to find neighbor in cached list
         neighbor = None
-        for n in self.neigbors:
+        for n in self.neighbors:
             if n["peer_id"] == peer_id:
                 neighbor = n
+                print(f"[ADD_ACTIVE_PEER] Found {peer_id[:8]} in cached neighbor list")
                 break
 
         # If not found, refresh from DB (newly discovered peer)
         if neighbor is None:
             try:
-                self.neigbors = self.db.get_neighbors()
-                for n in self.neigbors:
-                    if n["peer_id"] == peer_id:
-                        neighbor = n
-                        break
-            except Exception:
-                pass
+                # Check DB first for newly discovered peers
+                neighbor = self.db.get_neighbor(peer_id)
+                if neighbor:
+                    # Add to cache for future lookups
+                    self.neighbors.append(neighbor)
+                    print(f"[ADD_ACTIVE_PEER] Found {peer_id[:8]} in DB, added to cache")
+                else:
+                    # Refresh entire neighbor list from DB
+                    self.neighbors = self.db.get_neighbors()
+                    for n in self.neighbors:
+                        if n["peer_id"] == peer_id:
+                            neighbor = n
+                            print(f"[ADD_ACTIVE_PEER] Found {peer_id[:8]} after DB refresh")
+                            break
+            except Exception as e:
+                print(f"[ADD_ACTIVE_PEER] DB lookup error: {e}")
 
-        # Fallback neighbor object if still missing
+        # Only add peer to active list if it's a known neighbor (from initial config or discovered via FIND_ACK)
+        # Reject unknown peers that try to connect but are not in neighbor list
         if neighbor is None:
-            neighbor = {
-                "peer_id": peer_id,
-                "username": peer_id[:8],
-                "ip": "",
-                "port": 0,
-                "status": 1,
-                "last_seen": None
-            }
+            neighbor_names = [n.get("username", "?")[:8] for n in self.neighbors]
+            print(f"[REJECT] Peer {peer_id[:8]} is NOT in neighbor list. My neighbors: {neighbor_names}")
+            return
 
         # Add to active list if not already
         is_new_peer = not any(p.get("peer_id") == peer_id for p in self.active_peer)
         if is_new_peer:
+            print(f"[ADD_ACTIVE_PEER] Adding {neighbor.get('username')} to active peer list")
             self.active_peer.append(neighbor)
             
             # Mark neighbor as online in DB
@@ -318,11 +327,15 @@ class ChatManager(QObject):
                 print(f'[ERROR] send_broadcast_message failure for {peer_id}: {e}')
 
     def find_nodes(self):
-        """Broadcast FIND_NODES to all connected peers (safe iteration).
-        Iterate over a snapshot to avoid mutation during callbacks.
+        """Send FIND_NODES only to direct neighbors (safe iteration).
+        Only sends to neighbors in the neighbor list, not all connected peers.
         """
-        for peer_id, obj in list(self.clients.items()):
+        for neighbor in self.neighbors:
+            peer_id = neighbor.get("peer_id")
+            if not peer_id or peer_id not in self.clients:
+                continue
             try:
+                obj = self.clients[peer_id]
                 packet = encode_message(
                     sender=self.config.peer_id,
                     receiver=peer_id,
@@ -401,6 +414,13 @@ class ChatManager(QObject):
                     if peer_id == self.config.peer_id:
                         continue
 
+                    # Only connect to peers that are in our initial neighbor list
+                    # Do NOT connect to peers discovered transitively through FIND_ACK
+                    is_neighbor = any(n.get("peer_id") == peer_id for n in self.neighbors)
+                    if not is_neighbor:
+                        print(f"[LOG] Ignoring discovered peer {username} - not in initial neighbor list")
+                        continue
+
                     # Save/update neighbor and connect if needed
                     try:
                         self.db.upsert_neighbor(peer_id, username, ip, int(port), status=1)
@@ -452,7 +472,7 @@ class ChatManager(QObject):
         # Prepare neighbors payload (only online peers with minimal fields)
         neighbors_payload = []
         try:
-            for n in self.neigbors:
+            for n in self.neighbors:
                 if n.get("status", 0) == 1:
                     neighbors_payload.append({
                         "peer_id": n.get("peer_id"),
@@ -488,26 +508,9 @@ class ChatManager(QObject):
             except Exception as e:
                 print(f"[ERROR] Failed to send FIND_ACK to {sender}: {e}")
 
-        if ttl <= 0:
-            return
-
-        forward = encode_message(
-            sender=msg["from"],
-            receiver="*",
-            forwarder=self.config.peer_id,
-            content=msg["content"],
-            ttl=ttl,
-            message_type="FIND_NODES",
-            message_id=msg["message_id"]
-        )
-
-        for peer_id, obj in list(self.clients.items()):
-            if peer_id != sender:
-                try:
-                    if obj["worker"].running:  # Only forward if client is connected
-                        obj["worker"].send_data.emit(forward)
-                except Exception as e:
-                    print(f"[ERROR] Failed to forward FIND_NODES to {peer_id}: {e}")
+        # Note: We do NOT forward FIND_NODES further to maintain direct neighbor discovery only.
+        # If you want multi-hop discovery, set TTL > 0 when calling find_nodes() and uncomment the forwarding code below.
+        # This prevents discovery from flooding the entire network.
 
 
     def stop(self):

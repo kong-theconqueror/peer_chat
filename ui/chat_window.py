@@ -301,7 +301,9 @@ class ChatWindow(QMainWindow):
         
         self.node_list.clear()
         for peer in unique_peers:
-            item = QListWidgetItem(f'{peer["username"]}')
+            # Use username if available and not empty, otherwise use peer_id (first 8 chars)
+            display_name = peer.get("username") or peer.get("peer_id", "")[:8]
+            item = QListWidgetItem(display_name)
             item.setData(Qt.UserRole, peer)
             self.node_list.addItem(item)
 
