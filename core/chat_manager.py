@@ -421,7 +421,21 @@ class ChatManager(QObject):
                             "ip": ip,
                             "port": port
                         })
-                        self.status.emit(f"[DISCOVER] Found peer {username} ({ip}:{port})")
+                        
+                        # check if already in active peers
+                        is_new_peer = True
+                        for _peer in self.active_peer:
+                            if _peer.get("peer_id") == peer_id:
+                                is_new_peer = False
+                                break
+                        if is_new_peer: self.active_peer.append({
+                            "peer_id": peer_id,
+                            "username": username,
+                            "ip": ip,
+                            "port": port
+                        })
+                        self.update_peers.emit(self.active_peer)
+                        # self.status.emit(f"[DISCOVER] Found peer {username} ({ip}:{port})")
                 except Exception:
                     pass
             if discovered_peers:
