@@ -6,11 +6,11 @@ Hệ thống chat ngang hàng (Peer-to-Peer Chat System - P2P Chat) là mô hìn
 
 ### 1.1. Mục tiêu dự án
 
-Xây dựng ứng dụng chat peer-to-peer (P2P) phân tán, cho phép nhiều node (máy tính) kết nối, gửi/nhận tin nhắn, khám phá lẫn nhau mà không cần máy chủ trung tâm:
+Xây dựng ứng dụng chat peer-to-peer (P2P) phân tán:
 - Kết nối trực tiếp giữa các peer
 - Gửi và nhận tin nhắn được mã hóa
 - Định tuyến tin nhắn qua nhiều node trung gian (multi-hop routing)
-- Khám phá peer tự động trong mạng
+- Tìm kiếm peer trong mạng
 - Duy trì lịch sử chat phân tán
 
 ### 1.2. Các tính năng sẽ triển khai
@@ -22,7 +22,7 @@ Xây dựng ứng dụng chat peer-to-peer (P2P) phân tán, cho phép nhiều n
 #### 1.2.2. Gửi/Nhận Tin Nhắn
 - Chat 1-to-1: Gửi tin tới peer được chọn
 - Nhận tin: Hiển thị tin nhắn đến real-time
-- Lưu DB: Lưu tin vào localStorage
+- Lưu DB: Lưu tin vào local
 - Lịch sử: Hiển thị cuộc hội thoại
 
 #### 1.2.3. Định Tuyến và tìm kiếm
