@@ -91,7 +91,7 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 - Input bar dưới:
   - Ô nhập text (QTextEdit)
   - Nút "Send" (QPushButton)
-  - Gửi bằng nút "Send" (hiện chưa bind phím Enter)
+  - Gửi bằng nút "Send" 
 - Panel log:
   - Hiển thị sự kiện: connected, disconnected, message sent/received, error
 - Menu bar:
@@ -105,7 +105,7 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
 - Xử lý message
 - Giao tiếp database
 
-#### 2.2.3. Lớp Network
+#### 2.2.3a. Lớp Network
 - Mô hình kết nối:
   - Mỗi kết nối = 1 thread
   - Không block UI thread
@@ -115,7 +115,7 @@ Mỗi lớp chỉ giao tiếp với lớp liền kề, đảm bảo tính module
   - ClientWorker: kết nối chủ động
   - ServerClientWorker: xử lý socket đến
 
-#### 2.2.4. Lớp Database
+#### 2.2.3b. Lớp Database
 - Thiết kế phân tán:
   - SQLite riêng cho từng node
   - Không đồng bộ DB giữa các node
